@@ -1,0 +1,23 @@
+# 仓库内存 LF，检出时按平台转换（三人 Windows/Linux 混合协作不会产生满屏假 diff）
+* text=auto
+
+# 二进制文件：不参与换行转换、不做文本 diff
+*.png     binary
+*.jpg     binary
+*.drawio  binary
+*.pdf     binary
+*.bit     binary
+*.dcp     binary
+
+# 源码：明确按 LF 存储
+*.v       text eol=lf
+*.sv      text eol=lf
+*.vh      text eol=lf
+*.svh     text eol=lf
+*.c       text eol=lf
+*.h       text eol=lf
+*.S       text eol=lf
+*.ld      text eol=lf
+*.md      text eol=lf
+*.py      text eol=lf
+Makefile  text eol=lf

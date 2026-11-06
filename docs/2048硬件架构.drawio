@@ -1,0 +1,111 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/29.6.1 Chrome/142.0.7444.265 Electron/39.8.0 Safari/537.36" version="29.6.1">
+  <diagram name="第 1 页" id="-6bWRfiURrWQI5lmZG38">
+    <mxGraphModel dx="1140" dy="795" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="kZWLqL1ScSDP82quswmh-1" parent="1" style="whiteSpace=wrap;html=1;aspect=fixed;" value="CPU（IP）" vertex="1">
+          <mxGeometry height="110" width="110" x="650" y="390" as="geometry" />
+        </mxCell>
+        <mxCell id="kZWLqL1ScSDP82quswmh-4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="地址仲裁器（CPU随机读写，握手信号）" vertex="1">
+          <mxGeometry height="105" width="420" x="500" y="550" as="geometry" />
+        </mxCell>
+        <mxCell id="kZWLqL1ScSDP82quswmh-5" edge="1" parent="1" style="shape=flexArrow;endArrow=classic;startArrow=classic;html=1;rounded=0;" value="">
+          <mxGeometry height="100" relative="1" width="100" as="geometry">
+            <mxPoint x="560" y="720" as="sourcePoint" />
+            <mxPoint x="560" y="655" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="kZWLqL1ScSDP82quswmh-6" parent="1" style="whiteSpace=wrap;html=1;aspect=fixed;" value="Baseram" vertex="1">
+          <mxGeometry height="80" width="80" x="520" y="720" as="geometry" />
+        </mxCell>
+        <mxCell id="kZWLqL1ScSDP82quswmh-7" parent="1" style="whiteSpace=wrap;html=1;aspect=fixed;" value="Extram" vertex="1">
+          <mxGeometry height="80" width="80" x="640" y="720" as="geometry" />
+        </mxCell>
+        <mxCell id="kZWLqL1ScSDP82quswmh-8" edge="1" parent="1" style="shape=flexArrow;endArrow=classic;startArrow=classic;html=1;rounded=0;" value="">
+          <mxGeometry height="100" relative="1" width="100" as="geometry">
+            <mxPoint x="679.52" y="720" as="sourcePoint" />
+            <mxPoint x="679.52" y="655" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="kZWLqL1ScSDP82quswmh-10" edge="1" parent="1" style="shape=flexArrow;endArrow=classic;startArrow=classic;html=1;rounded=0;" value="">
+          <mxGeometry height="100" relative="1" width="100" as="geometry">
+            <mxPoint x="890" y="720" as="sourcePoint" />
+            <mxPoint x="890" y="655" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="kZWLqL1ScSDP82quswmh-14" edge="1" parent="1" style="shape=flexArrow;endArrow=classic;html=1;rounded=0;" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="679.52" y="800" as="sourcePoint" />
+            <mxPoint x="679.52" y="850" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="kZWLqL1ScSDP82quswmh-15" parent="1" style="whiteSpace=wrap;html=1;aspect=fixed;" value="DVI显示&lt;div&gt;(双缓冲翻页)&lt;/div&gt;" vertex="1">
+          <mxGeometry height="80" width="80" x="640" y="850" as="geometry" />
+        </mxCell>
+        <mxCell id="kZWLqL1ScSDP82quswmh-16" edge="1" parent="1" style="shape=flexArrow;endArrow=classic;startArrow=classic;html=1;rounded=0;" value="">
+          <mxGeometry height="100" relative="1" width="100" as="geometry">
+            <mxPoint x="705" y="550" as="sourcePoint" />
+            <mxPoint x="705" y="500" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="kZWLqL1ScSDP82quswmh-23" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;code style=&quot;display: inline-flex; align-items: center; box-sizing: border-box; font-variant-numeric: normal; font-variant-east-asian: normal; font-variant-alternates: normal; font-variant-position: normal; font-variant-emoji: normal; font-stretch: 100%; line-height: 22px; font-optical-sizing: auto; font-size-adjust: none; font-kerning: auto; font-feature-settings: normal; font-variation-settings: normal; font-family: &amp;quot;SF Mono&amp;quot;, &amp;quot;JetBrains Mono&amp;quot;, &amp;quot;Fira Code&amp;quot;, Consolas, &amp;quot;Liberation Mono&amp;quot;, Menlo, Courier, &amp;quot;PingFang SC&amp;quot;, &amp;quot;Microsoft YaHei&amp;quot;; background-color: rgb(235, 238, 242); border-radius: 6px; padding: 0px 5px; color: rgb(15, 17, 21); text-align: start; font-size: 0.875em !important;&quot;&gt;FB_CTRL&lt;/code&gt;&lt;span style=&quot;color: rgb(15, 17, 21); font-family: -apple-system, BlinkMacSystemFont, &amp;quot;Segoe UI&amp;quot;, &amp;quot;PingFang SC&amp;quot;, &amp;quot;Hiragino Sans GB&amp;quot;, &amp;quot;Microsoft YaHei&amp;quot;, &amp;quot;Helvetica Neue&amp;quot;, Helvetica, Arial, sans-serif; font-size: 16px; text-align: start; background-color: rgb(255, 255, 255);&quot;&gt;&amp;nbsp;寄存器&lt;/span&gt;" vertex="1">
+          <mxGeometry height="60" width="70" x="910" y="830" as="geometry" />
+        </mxCell>
+        <mxCell id="kZWLqL1ScSDP82quswmh-33" parent="1" style="rounded=0;whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=top;align=center;verticalAlign=bottom;" value="confreg" vertex="1">
+          <mxGeometry height="190" width="330" x="810" y="720" as="geometry" />
+        </mxCell>
+        <mxCell id="kZWLqL1ScSDP82quswmh-35" parent="1" style="whiteSpace=wrap;html=1;aspect=fixed;" value="STEP" vertex="1">
+          <mxGeometry height="50" width="50" x="850" y="750" as="geometry" />
+        </mxCell>
+        <mxCell id="kZWLqL1ScSDP82quswmh-38" parent="1" style="whiteSpace=wrap;html=1;aspect=fixed;" value="STATUS" vertex="1">
+          <mxGeometry height="50" width="50" x="920" y="750" as="geometry" />
+        </mxCell>
+        <mxCell id="kZWLqL1ScSDP82quswmh-39" parent="1" style="whiteSpace=wrap;html=1;aspect=fixed;" value="BTN" vertex="1">
+          <mxGeometry height="50" width="50" x="990" y="750" as="geometry" />
+        </mxCell>
+        <mxCell id="kZWLqL1ScSDP82quswmh-40" parent="1" style="whiteSpace=wrap;html=1;aspect=fixed;" value="KEY" vertex="1">
+          <mxGeometry height="50" width="50" x="1060" y="750" as="geometry" />
+        </mxCell>
+        <mxCell id="kZWLqL1ScSDP82quswmh-41" parent="1" style="whiteSpace=wrap;html=1;aspect=fixed;" value="TIME" vertex="1">
+          <mxGeometry height="50" width="50" x="850" y="840" as="geometry" />
+        </mxCell>
+        <mxCell id="kZWLqL1ScSDP82quswmh-42" parent="1" style="whiteSpace=wrap;html=1;aspect=fixed;" value="RAND" vertex="1">
+          <mxGeometry height="50" width="50" x="920" y="840" as="geometry" />
+        </mxCell>
+        <mxCell id="kZWLqL1ScSDP82quswmh-43" parent="1" style="whiteSpace=wrap;html=1;aspect=fixed;" value="FB_CTRL" vertex="1">
+          <mxGeometry height="60" width="60" x="990" y="835" as="geometry" />
+        </mxCell>
+        <mxCell id="kZWLqL1ScSDP82quswmh-46" edge="1" parent="1" style="shape=flexArrow;endArrow=classic;startArrow=classic;html=1;rounded=0;" value="">
+          <mxGeometry height="100" relative="1" width="100" as="geometry">
+            <mxPoint x="1060" y="720" as="sourcePoint" />
+            <mxPoint x="1060" y="655" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="kZWLqL1ScSDP82quswmh-47" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="16个LED，2个数码管，4个按钮，32位拨码开关" vertex="1">
+          <mxGeometry height="60" width="120" x="1000" y="595" as="geometry" />
+        </mxCell>
+        <mxCell id="kZWLqL1ScSDP82quswmh-48" edge="1" parent="1" style="shape=flexArrow;endArrow=classic;html=1;rounded=0;" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="640" y="890" as="sourcePoint" />
+            <mxPoint x="580" y="890" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="kZWLqL1ScSDP82quswmh-49" parent="1" style="whiteSpace=wrap;html=1;aspect=fixed;" value="板卡显示屏" vertex="1">
+          <mxGeometry height="80" width="80" x="500" y="850" as="geometry" />
+        </mxCell>
+        <mxCell id="kZWLqL1ScSDP82quswmh-50" edge="1" parent="1" source="kZWLqL1ScSDP82quswmh-15" style="shape=flexArrow;endArrow=classic;startArrow=classic;html=1;rounded=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;" target="kZWLqL1ScSDP82quswmh-43" value="">
+          <mxGeometry height="100" relative="1" width="100" as="geometry">
+            <Array as="points">
+              <mxPoint x="780" y="890" />
+              <mxPoint x="780" y="970" />
+              <mxPoint x="1020" y="970" />
+            </Array>
+            <mxPoint x="1100" y="1025" as="sourcePoint" />
+            <mxPoint x="1100" y="960" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
