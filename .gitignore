@@ -46,3 +46,8 @@ Xilinx/
 *~
 .DS_Store
 Thumbs.db
+
+# ---------- 竞赛工具链 / 仿真生成物 ----------
+requirements/loongarch32r-linux-gnusf-*/
+requirements/verilator-smoke/obj_dir/
+requirements/verilator-smoke/*.vcd
