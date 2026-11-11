@@ -1,4 +1,4 @@
-# ============================================================
+# ============================================================ 
 # 赛方 / 厂商文档：版权受限，禁止上传到公开仓库
 #   - A03 龙芯架构32位精简版参考手册
 #       版权归龙芯中科技术股份有限公司所有并保留一切权利，
@@ -48,6 +48,7 @@ Xilinx/
 Thumbs.db
 
 # ---------- 竞赛工具链 / 仿真生成物 ----------
-requirements/loongarch32r-linux-gnusf-*/
+# 只忽略解压出来的工具链目录；压缩包本身走 Git LFS，必须能提交
+requirements/loongarch32r-linux-gnusf*/
 requirements/verilator-smoke/obj_dir/
 requirements/verilator-smoke/*.vcd

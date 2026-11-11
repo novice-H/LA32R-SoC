@@ -39,7 +39,7 @@ cd LA32R-SoC
 # 1) 装系统依赖（会调用 sudo）
 bash requirements/setup-deps.sh
 
-# 2) 把交叉工具链压缩包放到 requirements/ 下并解压（见第 3 节）
+# 2) 从 Git LFS 拉取工具链并解压（见第 3 节）
 
 # 3) 配置环境并验证
 source requirements/env.sh
@@ -65,19 +65,19 @@ bash requirements/setup-deps.sh --check  # 只检查，不安装
 
 ```bash
 sudo apt update
-sudo apt install -y build-essential git python3 ca-certificates verilator gtkwave
+sudo apt install -y build-essential git git-lfs python3 ca-certificates verilator gtkwave
 ```
 
 **Fedora**
 
 ```bash
-sudo dnf install -y gcc gcc-c++ make git python3 verilator gtkwave
+sudo dnf install -y gcc gcc-c++ make git git-lfs python3 verilator gtkwave
 ```
 
 **Arch**
 
 ```bash
-sudo pacman -S --needed base-devel git python verilator gtkwave
+sudo pacman -S --needed base-devel git git-lfs python verilator gtkwave
 ```
 
 ### 2.3 检查版本
@@ -121,6 +121,7 @@ verilator --version
 | --- | --- |
 | `build-essential` / `g++` / `make` | Verilator 把 Verilog 转换成 C++ 后需要主机编译器编译 |
 | `git` | 拉取仓库、拉取 Verilator 源码 |
+| `git-lfs` | 拉取存放在 LFS 里的交叉工具链压缩包 |
 | `python3` | 把 `.bin` 转成 32 位字 `.mem`（见 6.2 节） |
 | `verilator` | 把 SystemVerilog 编译为高速 C++ 仿真 |
 | `gtkwave` | 查看 VCD/FST 波形 |
@@ -129,25 +130,39 @@ verilator --version
 
 ## 3. 获取交叉编译工具链
 
-工具链约 **286 MB / 3956 个文件**，**不随仓库分发**（避免仓库膨胀），需要单独获取。
+压缩包约 **112 MB**（解开 305 MB / 4000 个文件），存放在 **Git LFS** 里，跟仓库一起拉取，
+不需要再找队友要文件。
 
-### 3.1 从队内共享位置取得
-
-从队内共享盘 / 群文件拿到 `loongarch32r-linux-gnusf-2022-05-20.tar.gz`，然后：
+### 3.1 从 Git LFS 拉取并解压
 
 ```bash
-cd requirements
-tar xzf loongarch32r-linux-gnusf-2022-05-20.tar.gz
+# 每台机器装一次 LFS 客户端并启用（Ubuntu：sudo apt install git-lfs）
+git lfs install
+
+cd LA32R-SoC
+git lfs pull      # 只下载 LFS 对象；普通 clone 不会自动拉全量 LFS 内容
+tar xzf requirements/loongarch32r-linux-gnusf-2.0.tar.gz -C requirements/
 ```
 
-也可以直接把整个目录拷到 `requirements/` 下。
+解压得到 `requirements/loongarch32r-linux-gnusf-2.0/`，保持厂商原始结构：
 
-> **目录名必须保持 `loongarch32r-linux-gnusf-2022-05-20`**，`env.sh` 和 Makefile 模板都依赖它。
+```
+loongarch32r-linux-gnusf-2.0/
+├── loongson-gnu-toolchain-8.3-x86_64-loongarch32r-linux-gnusf-v2.0/
+└── picolibc/
+```
+
+> `env.sh` / `setup-deps.sh` 会自动搜索 `requirements/loongarch32r-linux-gnusf*/` 及其下一层
+> 子目录里的 `bin/loongarch32r-linux-gnusf-gcc`，目录名或套几层都不影响使用。
+
+压缩包里 `bin/`、`libexec/` 下文件权限为 `0755`，解压后直接可执行
+（Windows 没有可执行位，所以分发的是保留权限的 tarball，而不是展开目录，原因见 9.4）。
 
 ### 3.2 校验
 
 ```bash
-requirements/loongarch32r-linux-gnusf-2022-05-20/bin/loongarch32r-linux-gnusf-gcc --version
+source requirements/env.sh
+loongarch32r-linux-gnusf-gcc --version
 # 期望：loongarch32r-linux-gnusf-gcc (GCC) 8.3.0
 ```
 
@@ -156,26 +171,33 @@ requirements/loongarch32r-linux-gnusf-2022-05-20/bin/loongarch32r-linux-gnusf-gc
 网上的同类龙芯工具链通常硬编码 `/opt/...`，但这一份按**自身所在路径**查找
 `lib` / `libexec` / `sysroot`，放在仓库里就能直接用，**不需要 root**。
 
-验证：
+验证（`source requirements/env.sh` 之后 `$LA32_ROOT` 指向工具链根目录）：
 
 ```bash
-requirements/loongarch32r-linux-gnusf-2022-05-20/bin/loongarch32r-linux-gnusf-gcc -print-search-dirs
+"$LA32_ROOT/bin/loongarch32r-linux-gnusf-gcc" -print-search-dirs
 # 输出的路径应该指向 requirements/... 而不是 /opt/...
 ```
 
 ### 3.4 目录结构
 
 ```
-loongarch32r-linux-gnusf-2022-05-20/
-├── bin/       # 交叉工具：gcc / g++ / as / ld / objcopy / objdump / readelf ...
-├── lib/       # 编译器运行时（libgcc）
-├── libexec/   # cc1 / cc1plus / lto1 等编译器后端
-├── include/   # 主机侧头文件
-├── sysroot/   # 目标侧根目录：glibc 2.28 的头文件与 lib32 库
-└── share/     # 文档 / locale
+loongarch32r-linux-gnusf-2.0/
+└── loongson-gnu-toolchain-8.3-x86_64-loongarch32r-linux-gnusf-v2.0/
+    ├── bin/         # 30 个主机端交叉工具：gcc / g++ / as / ld / gdb / objcopy ...
+    ├── lib/         # 编译器运行时（libgcc）
+    ├── lib64/       # 主机端 64 位运行时
+    ├── libexec/     # cc1 / cc1plus / lto1 等编译器后端
+    ├── include/     # 主机侧头文件
+    ├── loongarch32r-linux-gnusf/
+    │   ├── bin/     # 目标侧工具（ar / as / ld ...）
+    │   ├── lib/ lib32/
+    │   └── sysroot/ # 目标根目录：glibc 2.28 的头文件与 lib32 库
+    ├── share/       # 文档 / locale / gdb
+    └── versions     # 版本清单（gcc 8.3.0 / binutils 2.31.1 / glibc 2.28 / gdb 8.1.50）
 ```
 
-`bin/` 共 28 个工具，**没有 `gdb`**，调试请用 `objdump` 反汇编或 Verilator 仿真。
+本版本（LA32 v2.0，2023-09-03）**自带 `gdb`**（`loongarch32r-linux-gnusf-gdb`），
+也可以照旧用 `objdump` 反汇编或 Verilator 仿真调试。
 
 ---
 
@@ -192,7 +214,8 @@ source requirements/env.sh
 ### 4.2 手动（效果等价）
 
 ```bash
-export LA32_ROOT="$PWD/requirements/loongarch32r-linux-gnusf-2022-05-20"
+# 注意：$LA32_ROOT 必须指向真正含 bin/ 的那一层目录
+export LA32_ROOT="$PWD/requirements/loongarch32r-linux-gnusf-2.0/loongson-gnu-toolchain-8.3-x86_64-loongarch32r-linux-gnusf-v2.0"
 export PATH="$LA32_ROOT/bin:$PATH"
 export CROSS=loongarch32r-linux-gnusf-
 ```
@@ -485,7 +508,7 @@ gtkwave dump.vcd
 ## 8. 常见问题 FAQ
 
 **Q1：`loongarch32r-linux-gnusf-gcc: command not found`**
-没 `source requirements/env.sh`，或工具链没解压到 `requirements/` 下。
+没 `source requirements/env.sh`，或没执行 `git lfs pull` / 没解压 tarball（见第 3 节）。
 用 `bash requirements/setup-deps.sh --check` 定位。
 
 **Q2：`multiple definition of 'main'`**
@@ -536,7 +559,8 @@ git clone https://gh-proxy.com/https://github.com/用户/仓库.git
 ### 9.2 Makefile 模板
 
 ```makefile
-LA32_ROOT := $(CURDIR)/requirements/loongarch32r-linux-gnusf-2022-05-20
+# 指向真正含 bin/ 的那一层目录；也可用 make LA32_ROOT=... 覆盖
+LA32_ROOT ?= $(CURDIR)/requirements/loongarch32r-linux-gnusf-2.0/loongson-gnu-toolchain-8.3-x86_64-loongarch32r-linux-gnusf-v2.0
 CROSS     := $(LA32_ROOT)/bin/loongarch32r-linux-gnusf-
 CC        := $(CROSS)gcc
 OBJCOPY   := $(CROSS)objcopy
@@ -570,32 +594,56 @@ clean:
 
 ```
 requirements/
-├── README.md                              # 本文件
-├── env.sh                                 # source 后配置 PATH
-├── setup-deps.sh                          # 安装/检查系统依赖
-├── loongarch32r-linux-gnusf-2022-05-20/   # 交叉工具链（286 MB，不进 git）
-└── verilator-smoke/                       # Verilator 仿真模板
+├── README.md                                # 本文件
+├── env.sh                                   # source 后配置 PATH
+├── setup-deps.sh                            # 安装/检查系统依赖
+├── loongarch32r-linux-gnusf-2.0.tar.gz      # 交叉工具链（112 MB，存 Git LFS）
+├── loongarch32r-linux-gnusf-2.0/            # 解压产物（305 MB，被 .gitignore 忽略）
+└── verilator-smoke/                         # Verilator 仿真模板
 ```
 
 ### 9.4 关于版本管理与协作
 
-工具链体积大（286 MB / 3956 个文件），**不要提交进 git**。仓库的 `.gitignore` 已加好：
+工具链解开有 305 MB / 4000 个文件，**绝不直接提交目录**，而是打成保留权限的
+`loongarch32r-linux-gnusf-2.0.tar.gz`（112 MB）提交到 **Git LFS**：
+
+```gitattributes
+requirements/*.tar.gz  filter=lfs diff=lfs merge=lfs -text
+```
 
 ```gitignore
-# 大体积交叉工具链，队友按第 3 节自行放置
-requirements/loongarch32r-linux-gnusf-*/
+# 解压出来的工具链目录不进 git（压缩包本身走 LFS）
+requirements/loongarch32r-linux-gnusf*/
 # Verilator 生成物
 requirements/verilator-smoke/obj_dir/
 requirements/verilator-smoke/*.vcd
 ```
 
-因此仓库里只有 `README.md`、`env.sh`、`setup-deps.sh` 和 `verilator-smoke/`（模板源码），
-队友按第 3 节把工具链放到 `requirements/` 下即可。
+仓库里因此只有压缩包 + `README.md` / `env.sh` / `setup-deps.sh` / `verilator-smoke/`。
+队友 `git lfs pull` 后按 3.1 解压即可。
+
+**为什么发 tarball 而不是展开目录**
+
+| 直接提交展开目录 | 提交 tarball（当前做法） |
+| --- | --- |
+| 4000+ 个 LFS 对象，clone / pull 慢、请求多 | 1 个 LFS 对象 |
+| Windows 无文件可执行位（`core.filemode=false`），gcc / ld 会以 `100644` 入库，Linux 上拉下来**没有执行权限**，还得 `chmod` | 权限固化在归档内，解压即用 |
+| 305 MB | 112 MB |
+
+维护者更新工具链：
+
+```bash
+git lfs track "requirements/*.tar.gz"      # 只需首次执行
+git add requirements/loongarch32r-linux-gnusf-2.0.tar.gz
+git commit -m "chore(requirements): 更新交叉工具链"
+git push
+```
 
 ### 9.5 环境已知的约束
 
-1. **没有 newlib、没有 gdb**：`printf`、`memcpy`、`memset` 需自己实现（对应 `sw/libc/`）；
-   浮点运算调用 `libgcc` 的软件模拟例程，性能低。
+1. **没有 newlib**：`printf`、`memcpy`、`memset` 需自己实现（对应 `sw/libc/`）；
+   浮点运算调用 `libgcc` 的软件模拟例程，性能低。gdb 虽然有（`loongarch32r-linux-gnusf-gdb`），
+   但 SoC 上没有调试代理，实际仍以 `objdump` 反汇编 / Verilator 仿真定位为主。
 2. **严格对齐**：结构体与 `memcpy` 实现注意 4 字节对齐。
 3. **起始地址**：`link.ld` 的 `0x80000000` 只是示例，必须与 `soc/` 指令存储器映射、
    `thinpad_top.v` 一致（见 `docs/design.md` 的地址映射一节）。
