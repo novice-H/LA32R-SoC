@@ -189,6 +189,10 @@ git lfs pull      # 只下载 LFS 对象；普通 clone 不会自动拉全量 LF
 tar xzf requirements/loongarch32r-linux-gnusf-2.0.tar.gz -C requirements/
 ```
 
+> **解压要在 Linux / WSL 里做**：Windows 自带 `tar` 解压到 NTFS 会丢掉归档里的 `0755`，
+> 解到 ext4 上就会变成"不可执行"。解压后可用 `ls -l .../bin/loongarch32r-linux-gnusf-gcc` 核对
+> 应为 `-rwxr-xr-x`（在 `/mnt/x` 这类 Windows 挂载点上恒显示 `0777`，属正常，见 `AGENTS.md` 第 11 节）。
+
 解压得到 `requirements/loongarch32r-linux-gnusf-2.0/`，保持厂商原始结构：
 
 ```
@@ -273,6 +277,18 @@ export CROSS=loongarch32r-linux-gnusf-
 ```bash
 echo 'source '"$PWD"'/requirements/env.sh' >> ~/.bashrc
 ```
+
+### 4.3.1 本机专属覆盖（不进仓库）
+
+`env.sh` 在执行时会依次加载本机覆盖文件（存在才加载，加载后会打印 `已加载本机覆盖：…`）：
+
+| 顺序 | 路径 | 适用场景 |
+| --- | --- | --- |
+| 1 | `${XDG_CONFIG_HOME:-$HOME/.config}/la32r/env.sh` | **首选**：Linux/WSL 侧。文件在发行版内部（WSL 的 VHDX 通常在 `F:\WSL\...`），**不落进工程目录** |
+| 2 | `requirements/env.local.sh` | 兼容：想在工程内放本地覆盖时用（已被 `.gitignore` 的 `*.local.*` 忽略） |
+
+典型内容：指向自己的工具链副本、公司/学校代理、把编译产物放到 ext4 加速等。
+模板与字段说明见仓库根目录 `LOCAL.example.md`，规则见 `AGENTS.md` 第 12 节。
 
 ### 4.4 校验清单
 

@@ -5,6 +5,11 @@
 # 兼容两种目录布局（env.sh 会自动找 bin/loongarch32r-linux-gnusf-gcc）：
 #   requirements/loongarch32r-linux-gnusf-*/bin/...
 #   requirements/loongarch32r-linux-gnusf-*/loongson-gnu-toolchain-*/bin/...
+#
+# 本机个性化覆盖（都不进 git，见 AGENTS.md 第 12 节），会依次加载：
+#   ${XDG_CONFIG_HOME:-$HOME/.config}/la32r/env.sh   首选：放在发行版内部（WSL 的 VHDX 在 F:\WSL，
+#                                                    任何写入都不落在工程目录里）
+#   requirements/env.local.sh                        兼容：放在工程内的本地覆盖（已被 *.local.* 忽略）
 
 _LA32_REQ_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _LA32_GCC=loongarch32r-linux-gnusf-gcc
@@ -19,8 +24,20 @@ for _cand in "$_LA32_REQ_DIR"/loongarch32r-linux-gnusf*/; do
     fi
   done
 done
+_LA32_AUTO="$LA32_ROOT"
 
+for _ovr in "${XDG_CONFIG_HOME:-$HOME/.config}/la32r/env.sh" "$_LA32_REQ_DIR/env.local.sh"; do
+  if [ -f "$_ovr" ]; then
+    . "$_ovr"
+    echo "已加载本机覆盖：$_ovr" >&2
+  fi
+done
 if [ -z "$LA32_ROOT" ]; then
+  LA32_ROOT="$_LA32_AUTO"
+fi
+export LA32_ROOT
+
+if [ -z "$LA32_ROOT" ] || [ ! -x "$LA32_ROOT/bin/$_LA32_GCC" ]; then
   echo "环境变量未设置：没找到工具链。" >&2
   echo "请先拉取 LFS 内容再解压（见 requirements/README.md 第 3 节）：" >&2
   echo "  git lfs pull && tar xzf requirements/loongarch32r-linux-gnusf-*.tar.gz -C requirements/" >&2
@@ -33,4 +50,4 @@ else
   echo "LA32R 工具链已就绪：$("$LA32_ROOT/bin/$_LA32_GCC" --version | head -1)"
 fi
 
-unset _LA32_REQ_DIR _LA32_GCC _cand _sub
+unset _LA32_REQ_DIR _LA32_GCC _cand _sub _LA32_AUTO _ovr

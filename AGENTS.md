@@ -276,13 +276,70 @@ git status --short
 1. **仓库放哪**：放 Windows 盘（`/mnt/f/...`）时 drvfs 不支持 Linux 权限位、
    IO 慢 3–10 倍、`inotify` 不可靠（`make` / Verilator 的文件监视会失效）。
    在 WSL 里做构建时，建议仓库放 `~/`（ext4），Windows 侧用 `\\wsl$\Ubuntu\home\...` 打开。
-2. **chmod 无效**：`/mnt/*` 上 `chmod` 被忽略（默认 0777），权限问题只能靠 git mode 或换到 ext4。
+2. **`chmod` 无效**：WSL 用 **DrvFs（9p 协议）** 挂载 Windows 盘到 `/mnt/x`，NTFS 没有 POSIX 权限位，
+   默认不启用 `metadata`，所以文件恒为 `0777`、`chmod` 无效、`core.filemode` 形同虚设。
+   **可以修**，见 11.2。
 3. **两侧同时 git**：同一仓库在 Windows 与 WSL 各跑一次 git 没问题，但
    `core.filemode` / `core.autocrlf` 会因所在文件系统不同而被 git 自动改写，注意别把这类差异提交上去。
 4. **脚本执行**：WSL 里跑 `bash requirements/setup-deps.sh`；Windows 侧跑
    `& 'C:\Program Files\PowerShell\7\pwsh.exe' -File xxx.ps1`。两套脚本各自维护，不互相调用。
 5. **换行**：用 Windows 编辑器改过 `requirements/*.sh` 后，务必确认仍是 LF
    （`git diff` 里不应出现整文件重写）。
+
+---
+
+### 11.1 为什么 `/mnt` 上"很多功能无效"
+
+| 表现 | 根因 | 能否修 |
+| --- | --- | --- |
+| `chmod` 无效、`filemode` 判断错 | DrvFs 默认不保存 Linux 权限（未开 `metadata`） | ✅ 开 `metadata`（11.2） |
+| IO 慢 3–10 倍、`git status` / `make` 卡 | 每次文件操作走 9p RPC（`msize=65536`），无本地页缓存 | ❌ 只能把热数据放 ext4 |
+| `inotify` 监视不触发 | 9p 不透传 inotify 事件 | ❌ 同上（`make` 不靠它，IDE 热重载会失效） |
+| 文件名大小写跟随 NTFS | NTFS 不区分大小写 | ⚠️ 可设 `case=force`，但会让 Windows 侧混乱，不建议 |
+| 符号链接 / 硬链接异常 | DrvFs 对二者支持有限 | ❌ 别在 Windows 盘上建 |
+
+结论：`/mnt/x` 只适合**存放源码**，不适合放"需要 Linux 语义"的东西（权限、监视、高 IO 的构建目录）。
+
+### 11.2 开启 metadata 让权限生效
+
+在**发行版内部**（文件位于 VHDX，物理路径形如 `F:\WSL\<distro>`）编辑 `/etc/wsl.conf`：
+
+```ini
+[automount]
+enabled = true
+options = "metadata,umask=22,fmask=11"
+```
+
+然后在 **Windows 侧**重启该发行版（`wsl.conf` 按发行版生效，约 8 秒后配置才加载）：
+
+```powershell
+wsl --terminate Ubuntu-26.04
+```
+
+校验：`wsl -e bash -lc "findmnt -no OPTIONS /mnt/f | tr ',' '\n' | grep metadata"`。
+
+注意：
+
+- `metadata` 会往 NTFS 写扩展属性，个别备份/同步工具会丢；
+- `[automount] options` 对**所有**自动挂载的 Windows 盘生效；只对某个盘生效请改用 `/etc/fstab`；
+- 开启后建议**重新解压一次工具链**，让归档里的 `0755` 落到文件上
+  （`tar xzf requirements/loongarch32r-linux-gnusf-2.0.tar.gz -C requirements/`）。
+
+### 11.3 `.wslconfig` 的位置改不了，配置放哪
+
+`%USERPROFILE%\.wslconfig` 是 WSL 硬编码的全局配置，**没有环境变量可以重定向**（微软文档未提供该机制）。
+故约定：
+
+| 配置 | 放哪 | 说明 |
+| --- | --- | --- |
+| 全局 VM 设置（网络/内存/swap） | `%USERPROFILE%\.wslconfig` | 只能在这里；保持最小化 |
+| 发行版设置（automount/interop/user） | `/etc/wsl.conf` | 在 VHDX 内，`wsl --terminate` 生效 |
+| 本机工具链/代理/构建目录覆盖 | `~/.config/la32r/env.sh` | 由 `requirements/env.sh` 自动 source |
+| shell 启动项 | `~/.bashrc` | 只写 `source .../requirements/env.sh` 这类引用 |
+| 构建产物（obj_dir 等） | `~/build/la32r/`（ext4） | 别放 `/mnt`，见 11.1 |
+
+以上除 `.wslconfig` 外**全部位于发行版内部**，物理上都在 `F:\WSL\<distro>` 的 VHDX 中，
+**不会落进工程目录**，也不会进 git。
 
 ---
 
@@ -297,7 +354,8 @@ git status --short
 | `.gitattributes`、`.gitignore` | 协作（提交） | 跨平台行为的唯一权威来源 |
 | `LOCAL.example.md` | 协作（提交） | 本地备忘的**模板**，只放字段与用法 |
 | `LOCAL.md` | **本地（忽略）** | 你自己的版本、路径、代理、磁盘位置，**禁止提交** |
-| `*.local.*`（`requirements/env.local.sh`、`Makefile.local`、`*.local.v`） | **本地（忽略）** | 机器相关覆盖项，由主脚本按需 source |
+| `*.local.*`（`requirements/env.local.sh`、`Makefile.local`、`*.local.v`） | **本地（忽略）** | 机器相关覆盖项，由 `env.sh` 按需 source |
+| `~/.config/la32r/env.sh` | **本地（仓库外）** | WSL/Linux 侧覆盖的**首选**位置，在发行版内部（VHDX 在 `F:\WSL`），不落工程目录 |
 | `.venv/`、`.vscode/`、`obj_dir/`、`*.vcd` | **本地（忽略）** | 工具链/IDE/仿真生成物 |
 | `requirements/loongarch32r-linux-gnusf*/` | **本地（忽略）** | 解压出来的工具链（压缩包本身走 LFS，必须提交） |
 
