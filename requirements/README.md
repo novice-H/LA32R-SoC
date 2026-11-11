@@ -404,6 +404,10 @@ for i in range(0, len(d), 4):
 " > app.mem
 ```
 
+> **Windows 上生成 `.mem` 要注意换行**：`print` 重定向会写出 CRLF，`$readmemh` 可能解析错。
+> 用 `python3 ... | tr -d '\r' > app.mem`，或直接 `open('app.mem','w',newline='\n')` 写入。
+> 详见 `AGENTS.md` 第 8 节。
+
 Verilator 读入验证（实测 `word0=1c000083`，与反汇编一致）：
 
 ```systemverilog

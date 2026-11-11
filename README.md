@@ -5,6 +5,7 @@
 ```
 .
 ├── README.md
+├── AGENTS.md      # 项目规则：跨平台（Windows/Linux、pwsh/bash）协作约定
 ├── docs/
 ├── soc/
 │   └── accel/
@@ -34,3 +35,9 @@
 | `sw/app/` | 2048 规则内核、界面绘制、Expectimax AI、主循环 |
 | `ref/` | PC 端 oracle、行移动表生成器、一致性回归脚本 |
 | `tools/` | 构建入口、烧写脚本、验证脚本 |
+
+## 开发规范
+
+跨平台协作（Windows / WSL / Linux，PowerShell 7 / bash）的统一约定见 [**AGENTS.md**](AGENTS.md)：
+换行符 CRLF/LF、可执行位、文件编码、路径与文件名大小写、shell 语法对照、构建产物陷阱、
+提交前自检清单。改脚本或配置前先扫一眼，能省掉大部分"在我机器上是好的"。
