@@ -1,5 +1,7 @@
 # 用法：source requirements/env.sh
 # 作用：把交叉工具链加入 PATH，并导出常用变量。路径按本文件位置自动推导，换机器不用改。
+# 当前分发的工具链：LA32 v2.0（2023-09-03），包名 requirements/loongarch32r-linux-gnusf-2.0.tar.gz，
+# 由 Git LFS 分发；与文档初版的 2022-05-20 版不同，见 README 3.0 节。
 # 兼容两种目录布局（env.sh 会自动找 bin/loongarch32r-linux-gnusf-gcc）：
 #   requirements/loongarch32r-linux-gnusf-*/bin/...
 #   requirements/loongarch32r-linux-gnusf-*/loongson-gnu-toolchain-*/bin/...

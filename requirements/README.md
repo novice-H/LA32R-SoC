@@ -11,7 +11,14 @@
 | 主机 GCC | 13.3.0 |
 | Verilator | 5.020 (2024-01-01) |
 | GTKWave | 3.3.116 |
-| 交叉工具链 | loongarch32r-linux-gnusf GCC 8.3.0 |
+| 交叉工具链 | loongarch32r-linux-gnusf GCC 8.3.0（**LA32 v2.0 / 2023-09-03**，见 3.0 节） |
+
+> ### ⚠️ 版本变更：仓库里的工具链已换版（2026-11-11）
+>
+> 本文**初版**是按队内共享的 `loongarch32r-linux-gnusf-2022-05-20.tar.gz`（286 MB / 3956 文件）写的；
+> 现在仓库通过 **Git LFS** 分发的是 **`loongarch32r-linux-gnusf-2.0.tar.gz`（LA32 v2.0 / 2023-09-03，112 MB）**。
+> 两者 **gcc 主版本相同（8.3.0）**，但**目录结构、体积、附带组件都不同**，而且现版本**自带 `gdb`**。
+> 按旧文档操作过的同学请先看 **3.0 节对照表**再动手，不要再去共享盘找 `-2022-05-20` 那个包。
 
 ---
 
@@ -133,6 +140,44 @@ verilator --version
 压缩包约 **112 MB**（解开 305 MB / 4000 个文件），存放在 **Git LFS** 里，跟仓库一起拉取，
 不需要再找队友要文件。
 
+> **注意：这份包与本文初版描述的 `-2022-05-20` 版不是同一个版本，先看 3.0 节对齐。**
+
+### 3.0 版本变更说明（必读）
+
+本文初版描述的包，和仓库现在分发的包**不是同一版本**。对齐版本请以本表为准：
+
+| 对比项 | 旧版（README 初版 / 队内共享盘） | 现版本（仓库 Git LFS） |
+| --- | --- | --- |
+| 压缩包 | `loongarch32r-linux-gnusf-2022-05-20.tar.gz` | **`loongarch32r-linux-gnusf-2.0.tar.gz`** |
+| 厂商版本 | 2022-05-20 | **LA32 v2.0（2023-09-03）** |
+| 体积 | 286 MB / 3956 个文件 | 112 MB（gz）/ 305 MB / 4000+ 个文件（解开） |
+| 获取方式 | 队内共享盘 / 群文件 | `git lfs pull` + `tar xzf`（3.1 节） |
+| 解压后顶层 | `loongarch32r-linux-gnusf-2022-05-20/`，`bin/` 直接在顶层 | `loongarch32r-linux-gnusf-2.0/loongson-gnu-toolchain-8.3-x86_64-loongarch32r-linux-gnusf-v2.0/`，**多套一层** |
+| gcc | 8.3.0 | 8.3.0（相同） |
+| binutils | 2.31.1 | 2.31.1（相同） |
+| glibc（sysroot） | 2.28 | 2.28（相同） |
+| gdb | **不含** | **含** `loongarch32r-linux-gnusf-gdb` 8.1.50 |
+| 目标侧根目录 | `sysroot/` | `loongarch32r-linux-gnusf/sysroot/` |
+| 宿主端工具数 | 28 个 | 30 个 |
+| 附加组件 | 无 | `picolibc/`（内含 `picolibc.tar.gz`） |
+| 是否进 Git | 否（共享盘分发） | 是，**存 Git LFS**（单个 tarball） |
+
+**对使用者的实际影响**
+
+1. **编译命令不用改**：工具链前缀仍是 `loongarch32r-linux-gnusf-`，gcc / binutils / glibc 版本号与旧版一致，
+   第 5 节的编译方式、第 9.1 节的选项速查、第 9.2 节的 Makefile 模板继续适用。
+2. **路径要改**：`bin/` 多套了一层 `loongson-gnu-toolchain-8.3-x86_64-loongarch32r-linux-gnusf-v2.0/`。
+   除非你手上有写死旧路径的脚本，否则**直接用 `source requirements/env.sh`**（自动探测，见 3.1 节）。
+3. **自带 gdb 了**：旧文档"没有 gdb"的说法作废（9.5 节已更正）；但 SoC 上没有调试代理，
+   实际仍以 `objdump` 反汇编 / Verilator 仿真为主。
+4. **别新旧混用**：本地若还留着 `loongarch32r-linux-gnusf-2022-05-20/`，建议删除。
+   仓库里新旧目录都被 `.gitignore` 忽略（`requirements/loongarch32r-linux-gnusf*/`），不影响提交。
+
+> 遇到与本文不一致的现象时，**以工具实际输出为准**：
+> `source requirements/env.sh` 后跑 `loongarch32r-linux-gnusf-gcc --version`、
+> `"$LA32_ROOT/bin/loongarch32r-linux-gnusf-gcc" -print-search-dirs`、`cat "$LA32_ROOT/versions"`，
+> 并把结果补进本文，方便下一个人对齐。
+
 ### 3.1 从 Git LFS 拉取并解压
 
 ```bash
@@ -198,6 +243,7 @@ loongarch32r-linux-gnusf-2.0/
 
 本版本（LA32 v2.0，2023-09-03）**自带 `gdb`**（`loongarch32r-linux-gnusf-gdb`），
 也可以照旧用 `objdump` 反汇编或 Verilator 仿真调试。
+旧版（`-2022-05-20`，本文初版描述的包）**不含 gdb**、且 `bin/` 直接在顶层——两者别混用，详见 3.0。
 
 ---
 
@@ -535,7 +581,13 @@ git clone https://gh-proxy.com/https://github.com/用户/仓库.git
 先设 `GDK_BACKEND=x11 gtkwave x.vcd`。
 
 **Q9：Windows 拷过来的文件报 `bash^M`**
-换行符问题：`sed -i 's/\r$//' 文件`，建议 git 配 `core.autocrlf=input`。
+换行符问题。仓库已在 `.gitattributes` 里把 `*.sh` 固定为 `eol=lf`，正常 clone 不会再出问题；
+本地旧文件修一次即可：`sed -i 's/\r$//' requirements/*.sh`（或把 `core.autocrlf` 设为 `input`）。
+
+**Q10：找不到 `loongarch32r-linux-gnusf-2022-05-20`，或版本/路径对不上**
+本文初版描述的是队内共享盘上的旧包；仓库现在通过 Git LFS 分发的是
+**LA32 v2.0（2023-09-03）** 的 `loongarch32r-linux-gnusf-2.0.tar.gz`，目录结构也不同。
+**以 3.0 节对照表为准**，不要再去找 `-2022-05-20` 那个包。
 
 ---
 
@@ -630,7 +682,7 @@ requirements/verilator-smoke/*.vcd
 | Windows 无文件可执行位（`core.filemode=false`），gcc / ld 会以 `100644` 入库，Linux 上拉下来**没有执行权限**，还得 `chmod` | 权限固化在归档内，解压即用 |
 | 305 MB | 112 MB |
 
-维护者更新工具链：
+维护者更新 / 更换工具链版本：
 
 ```bash
 git lfs track "requirements/*.tar.gz"      # 只需首次执行
@@ -639,13 +691,31 @@ git commit -m "chore(requirements): 更新交叉工具链"
 git push
 ```
 
+换版本时**必须同步更新本文**，至少改以下几处，否则队友会对齐不上：
+
+1. 文首的实测环境表 + 版本变更提示块；
+2. **3.0 版本变更对照表**（新旧包名、体积、目录结构、组件差异）；
+3. 3.1 的 `tar xzf` 文件名、3.4 的目录结构；
+4. 9.6 变更记录追加一行。
+
+`env.sh` / `setup-deps.sh` 会按 `requirements/loongarch32r-linux-gnusf*/` 自动探测 `bin/`，
+**换版本不必改脚本**（仅当新包结构与上述两种布局都不同时才需要动）。
+
 ### 9.5 环境已知的约束
 
 1. **没有 newlib**：`printf`、`memcpy`、`memset` 需自己实现（对应 `sw/libc/`）；
-   浮点运算调用 `libgcc` 的软件模拟例程，性能低。gdb 虽然有（`loongarch32r-linux-gnusf-gdb`），
-   但 SoC 上没有调试代理，实际仍以 `objdump` 反汇编 / Verilator 仿真定位为主。
+   浮点运算调用 `libgcc` 的软件模拟例程，性能低。现版本（v2.0）自带 gdb
+   （`loongarch32r-linux-gnusf-gdb`，旧版 2022-05-20 则没有），但 SoC 上没有调试代理，
+   实际仍以 `objdump` 反汇编 / Verilator 仿真定位为主。
 2. **严格对齐**：结构体与 `memcpy` 实现注意 4 字节对齐。
 3. **起始地址**：`link.ld` 的 `0x80000000` 只是示例，必须与 `soc/` 指令存储器映射、
    `thinpad_top.v` 一致（见 `docs/design.md` 的地址映射一节）。
 4. **`$readmemh` 字宽**：32 位存储器必须用 32 位字格式（6.2 节）。
 5. 目录名统一为 `requirements`（全拼），脚本与文档中均使用该名称。
+
+### 9.6 文档与工具链变更记录
+
+| 日期 | 变更 |
+| --- | --- |
+| 2026-11-11 | 工具链切到 **LA32 v2.0（2023-09-03）**，打包为 `loongarch32r-linux-gnusf-2.0.tar.gz`（112 MB）改由 **Git LFS** 分发；`env.sh` / `setup-deps.sh` 改为自动定位工具链、新增 `git-lfs` 检查；新增 3.0 版本对照节；更正目录结构、体积、`gdb` 有无等与旧版不一致的描述 |
+| 初版 | 依据队内共享的 `loongarch32r-linux-gnusf-2022-05-20.tar.gz`（286 MB / 3956 文件，无 gdb）编写 |
