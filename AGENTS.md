@@ -283,3 +283,29 @@ git status --short
    `& 'C:\Program Files\PowerShell\7\pwsh.exe' -File xxx.ps1`。两套脚本各自维护，不互相调用。
 5. **换行**：用 Windows 编辑器改过 `requirements/*.sh` 后，务必确认仍是 LF
    （`git diff` 里不应出现整文件重写）。
+
+---
+
+## 12. 协作文件 vs 本地个性化文件
+
+原则：**对所有人成立的内容进仓库，只对你这台机器成立的内容留在本地。**
+
+| 文件 / 模式 | 归属 | 说明 |
+| --- | --- | --- |
+| `README.md`、`AGENTS.md`、`docs/**` | 协作（提交） | 全体适用的流程与规范 |
+| `requirements/README.md`、`env.sh`、`setup-deps.sh` | 协作（提交） | 路径全部按脚本自身位置推导，不写死机器 |
+| `.gitattributes`、`.gitignore` | 协作（提交） | 跨平台行为的唯一权威来源 |
+| `LOCAL.example.md` | 协作（提交） | 本地备忘的**模板**，只放字段与用法 |
+| `LOCAL.md` | **本地（忽略）** | 你自己的版本、路径、代理、磁盘位置，**禁止提交** |
+| `*.local.*`（`requirements/env.local.sh`、`Makefile.local`、`*.local.v`） | **本地（忽略）** | 机器相关覆盖项，由主脚本按需 source |
+| `.venv/`、`.vscode/`、`obj_dir/`、`*.vcd` | **本地（忽略）** | 工具链/IDE/仿真生成物 |
+| `requirements/loongarch32r-linux-gnusf*/` | **本地（忽略）** | 解压出来的工具链（压缩包本身走 LFS，必须提交） |
+
+### 规则
+
+1. 新机器上手：`cp LOCAL.example.md LOCAL.md`（Windows 用 `Copy-Item`），填完再开始干活。
+2. 发现"这条规则只对我有效"时，**不要改** `README.md` / `AGENTS.md`，写进 `LOCAL.md`。
+3. 反过来，需要所有人生效的改动，**必须**进 `.gitattributes` / `.gitignore` / 脚本，不能只写在自己本地。
+4. 任何带**凭据、内网地址、个人绝对路径、机器名**的内容（token、代理口令、`C:\Users\你的名字\...`）
+   一律只写 `LOCAL.md` 或 `env.local.sh`。
+5. 提交前确认：`git check-ignore -v LOCAL.md` 有命中，`git status --short` 里不出现上面标"本地"的路径。
