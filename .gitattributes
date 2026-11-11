@@ -15,6 +15,7 @@
 *.vh      text eol=lf
 *.svh     text eol=lf
 *.c       text eol=lf
+*.cpp     text eol=lf
 *.h       text eol=lf
 *.S       text eol=lf
 *.ld      text eol=lf
