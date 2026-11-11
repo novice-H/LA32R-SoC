@@ -11,7 +11,19 @@ CHECK_ONLY=0
 [ "${1:-}" = "--check" ] && CHECK_ONLY=1
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TOOLCHAIN="$DIR/loongarch32r-linux-gnusf-2022-05-20"
+
+# 定位工具链：兼容 requirements/loongarch32r-linux-gnusf-*/bin 与
+# requirements/loongarch32r-linux-gnusf-*/loongson-gnu-toolchain-*/bin 两种布局
+TOOLCHAIN=""
+for cand in "$DIR"/loongarch32r-linux-gnusf*/; do
+  [ -d "$cand" ] || continue
+  for sub in "$cand" "$cand"*/; do
+    if [ -x "${sub}bin/loongarch32r-linux-gnusf-gcc" ]; then
+      TOOLCHAIN="${sub%/}"
+      break 2
+    fi
+  done
+done
 OK=0
 FAIL=0
 
@@ -29,11 +41,11 @@ detect_pm() {
 install_deps() {
   local pm; pm="$(detect_pm)"
   case "$pm" in
-    apt-get) sudo apt-get update && sudo apt-get install -y build-essential git python3 ca-certificates verilator gtkwave ;;
-    dnf)     sudo dnf install -y gcc gcc-c++ make git python3 verilator gtkwave ;;
-    pacman)  sudo pacman -S --needed --noconfirm base-devel git python verilator gtkwave ;;
-    zypper)  sudo zypper install -y gcc gcc-c++ make git python3 verilator gtkwave ;;
-    *) say "未知包管理器，请手动安装：gcc g++ make git python3 verilator gtkwave"; return 1 ;;
+    apt-get) sudo apt-get update && sudo apt-get install -y build-essential git git-lfs python3 ca-certificates verilator gtkwave ;;
+    dnf)     sudo dnf install -y gcc gcc-c++ make git git-lfs python3 verilator gtkwave ;;
+    pacman)  sudo pacman -S --needed --noconfirm base-devel git git-lfs python verilator gtkwave ;;
+    zypper)  sudo zypper install -y gcc gcc-c++ make git git-lfs python3 verilator gtkwave ;;
+    *) say "未知包管理器，请手动安装：gcc g++ make git git-lfs python3 verilator gtkwave"; return 1 ;;
   esac
 }
 
@@ -62,6 +74,12 @@ check_cmd make
 check_cmd git
 check_cmd python3
 
+if command -v git-lfs >/dev/null 2>&1 || git lfs version >/dev/null 2>&1; then
+  pass "git-lfs  $(git lfs version 2>/dev/null | head -1)"
+else
+  fail "git-lfs  （未安装，工具链压缩包存在 Git LFS 里，需要它才能拉取）"
+fi
+
 if command -v verilator >/dev/null 2>&1; then
   v="$(verilator --version 2>/dev/null | awk '{print $2}')"
   pass "verilator  $v"
@@ -75,11 +93,11 @@ fi
 
 check_cmd gtkwave
 
-if [ -x "$TOOLCHAIN/bin/loongarch32r-linux-gnusf-gcc" ]; then
+if [ -n "$TOOLCHAIN" ] && [ -x "$TOOLCHAIN/bin/loongarch32r-linux-gnusf-gcc" ]; then
   pass "交叉工具链  $("$TOOLCHAIN/bin/loongarch32r-linux-gnusf-gcc" --version | head -1)"
 else
-  fail "交叉工具链  （$TOOLCHAIN 下没有 loongarch32r-linux-gnusf-gcc）"
-  say "        请按 README 第 3 节把工具链解压到 requirements/ 下"
+  fail "交叉工具链  （requirements/ 下没有 loongarch32r-linux-gnusf-gcc）"
+  say "        请先 git lfs pull，再 tar xzf requirements/loongarch32r-linux-gnusf-*.tar.gz -C requirements/（见 README 第 3 节）"
 fi
 
 say ""
