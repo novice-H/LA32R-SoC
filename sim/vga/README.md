@@ -132,6 +132,17 @@ make clean
 
 ## 5. 接入你自己的 VGA 模块
 
+仓库当前提供了一个按本契约实现的正式帧缓冲核心：`../soc/vga_fb.v`，以及对应的仿真包装器：`vga/dut_vga_fb.v`。可以直接用下面的命令验证：
+
+```bash
+make clean
+make lint DUT="vga/dut_vga_fb.v ../soc/vga_fb.v"
+make run DUT="vga/dut_vga_fb.v ../soc/vga_fb.v"
+make compare DUT="vga/dut_vga_fb.v ../soc/vga_fb.v"
+```
+
+这个核心实现了 800x600@72.19 Hz 扫描、RGB332 四像素打包、FB0/FB1 选择和 RAM 一拍读延迟。接入整机时，`ram_addr/ram_req/ram_rdata` 需要连接到 CPU/DVI 共用的 ExtRAM 仲裁器。
+
 1. 把正式的 VGA / DVI 模块写在 `soc/` 下（按 `docs/design.md` 2.2.7）
 2. 在 `sim/vga/` 新建一个包装文件，例如 `dut_my_vga.v`：
 
