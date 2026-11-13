@@ -1,13 +1,13 @@
 // ---------------------------------------------------------------------------
-// vga_pattern.c —— 生成 VGA 测试图案
+// vga_pattern.c —— 生成 VGA 测试图案（双帧，用于翻页测试）
 //
 // 产物（在当前目录）：
-//   fb0.bin       480000 字节，就是 FB0 的字节内容（1 字节/像素，RGB332）
-//   expected.ppm  由同一份字节展开成 RGB888 的"预期图片"（P6）
+//   fb0.bin       480000 字节，FB0 的字节内容（1 字节/像素，RGB332）
+//   fb1.bin       480000 字节，FB1 的字节内容（另一幅画面）
+//   expected.ppm  由 fb0 展开的 RGB888 预期图（P6）
+//   expected1.ppm 由 fb1 展开的 RGB888 预期图（P6）
 //
-// 这个程序扮演"在 PC 上编译运行的游戏绘制代码"：它把画面写进帧缓冲，
-// 仿真侧则把同一份 fb0.bin 灌进 RAM，由 RTL 扫描出来。两者应逐像素一致。
-//
+// 两帧布局相同、内容不同，用来验证 fb_sel 翻页：新帧必须整帧来自 FB1。
 // 配色取自 docs/design.md 2.2.7.4：背景 0x6D、色块 0xEF、文字 0x00
 // ---------------------------------------------------------------------------
 #include <stdio.h>
@@ -21,6 +21,7 @@
 #define COL_BG   0x6D
 #define COL_TILE 0xEF
 #define COL_TEXT 0x00
+#define COL_RED  0xE0
 
 static uint8_t fb[W * H];
 
@@ -68,9 +69,82 @@ static void draw_number(int x, int y, int val, int scale, uint8_t color) {
     }
 }
 
-static int write_ppm(const char *path) {
-    FILE *f = fopen(path, "wb");
-    if (!f) { perror(path); return -1; }
+// 两幅画面共用布局，只换内容/颜色，方便逐像素对比时定位差异
+static void draw_frame(int variant) {
+    static const int board0[4][4] = {
+        {2,    4,    8,    16},
+        {32,   64,   128,  256},
+        {512,  1024, 2048, 0},
+        {2,    4,    8,    16},
+    };
+    static const int board1[4][4] = {
+        {16,   8,    4,    2},
+        {256,  128,  64,   32},
+        {0,    2048, 1024, 512},
+        {16,   8,    4,    2},
+    };
+
+    memset(fb, COL_BG, sizeof fb);
+
+    // 外边框
+    fill_rect(0, 0, W, 2, COL_TILE);
+    fill_rect(0, H - 2, W, 2, COL_TILE);
+    fill_rect(0, 0, 2, H, COL_TILE);
+    fill_rect(W - 2, 0, 2, H, COL_TILE);
+
+    // 标题：第 1 帧米白，第 2 帧红色（肉眼一眼能区分翻页是否生效）
+    const int title_scale = 8;
+    int tw = number_width(2048, title_scale);
+    draw_number((W - tw) / 2, 24, 2048, title_scale,
+                variant == 0 ? COL_TILE : COL_RED);
+
+    // 4x4 棋盘
+    const int tile = 100, gap = 12, cell = tile + gap;
+    const int bw = 4 * tile + 5 * gap;
+    const int bh = bw;
+    const int x0 = (W - bw) / 2;
+    const int y0 = 118;
+    const int num_scale = 4;
+
+    if (x0 < 4 || y0 + bh > H - 4) {
+        fprintf(stderr, "布局越界: x0=%d y0=%d bh=%d H=%d\n", x0, y0, bh, H);
+        exit(1);
+    }
+
+    for (int r = 0; r < 4; r++) {
+        for (int c = 0; c < 4; c++) {
+            int v = (variant == 0) ? board0[r][c] : board1[r][c];
+            int tx = x0 + gap + c * cell;
+            int ty = y0 + gap + r * cell;
+            if (v == 0) continue;
+            fill_rect(tx, ty, tile, tile, COL_TILE);
+            int nw = number_width(v, num_scale);
+            int nh = 7 * num_scale;
+            draw_number(tx + (tile - nw) / 2, ty + (tile - nh) / 2, v, num_scale, COL_TEXT);
+        }
+    }
+
+    // FB1 独有标记：覆盖最左上 4x2 像素（正好是第 0 个 32 位字），
+    // 让翻页测试能发现"首字仍来自旧缓冲"的预取问题。
+    if (variant == 1) {
+        fill_rect(0, 0, 4, 2, COL_RED);
+    }
+
+    // 四角标记：用来快速定位首行/末行/边沿
+    fill_rect(2, H - 10, 8, 8, 0xFF);
+    fill_rect(W - 10, H - 10, 8, 8, 0x00);
+    fill_rect(2, 32, 8, 8, COL_RED);
+    if (variant == 1) fill_rect(W - 10, 32, 8, 8, 0x1C);   // 第 2 帧独有的角标
+}
+
+static int write_files(const char *fb_path, const char *ppm_path) {
+    FILE *f = fopen(fb_path, "wb");
+    if (!f) { perror(fb_path); return -1; }
+    if (fwrite(fb, 1, sizeof fb, f) != sizeof fb) { perror("fwrite"); fclose(f); return -1; }
+    fclose(f);
+
+    f = fopen(ppm_path, "wb");
+    if (!f) { perror(ppm_path); return -1; }
     fprintf(f, "P6\n%d %d\n255\n", W, H);
     for (int i = 0; i < W * H; i++) {
         uint8_t p = fb[i];
@@ -83,68 +157,7 @@ static int write_ppm(const char *path) {
     return 0;
 }
 
-int main(void) {
-    // 1) 背景
-    memset(fb, COL_BG, sizeof fb);
-
-    // 2) 外边框（2 像素），便于检查边沿与地址映射是否错位
-    fill_rect(0, 0, W, 2, COL_TILE);
-    fill_rect(0, H - 2, W, 2, COL_TILE);
-    fill_rect(0, 0, 2, H, COL_TILE);
-    fill_rect(W - 2, 0, 2, H, COL_TILE);
-
-    // 3) 标题 "2048"（scale 8）
-    const int title_scale = 8;
-    const int title = 2048;
-    int tw = number_width(title, title_scale);
-    draw_number((W - tw) / 2, 24, title, title_scale, COL_TILE);
-
-    // 4) 4x4 棋盘（600 格 / 空隙 12 / 色块 100）
-    static const int board[4][4] = {
-        {2,    4,    8,    16},
-        {32,   64,   128,  256},
-        {512,  1024, 2048, 0},
-        {2,    4,    8,    16},
-    };
-    const int tile = 100, gap = 12, cell = tile + gap;
-    const int bw = 4 * tile + 5 * gap;          // 460
-    const int bh = bw;
-    const int x0 = (W - bw) / 2;                // 170
-    const int y0 = 118;
-    const int num_scale = 4;
-
-    if (x0 < 4 || y0 + bh > H - 4) {
-        fprintf(stderr, "布局越界: x0=%d y0=%d bh=%d H=%d\n", x0, y0, bh, H);
-        return 1;
-    }
-
-    for (int r = 0; r < 4; r++) {
-        for (int c = 0; c < 4; c++) {
-            int v = board[r][c];
-            int tx = x0 + gap + c * cell;
-            int ty = y0 + gap + r * cell;
-            if (v == 0) continue;               // 空格：保留背景色
-            fill_rect(tx, ty, tile, tile, COL_TILE);
-            int nw = number_width(v, num_scale);
-            int nh = 7 * num_scale;
-            draw_number(tx + (tile - nw) / 2, ty + (tile - nh) / 2, v, num_scale, COL_TEXT);
-        }
-    }
-
-    // 5) 底部标记：左下角 8x8 纯色小块 = 0xFF（白），右下角 = 0x00，用于快速定位首行/末行
-    fill_rect(2, H - 10, 8, 8, 0xFF);
-    fill_rect(W - 10, H - 10, 8, 8, 0x00);
-    fill_rect(2, 2 + 30, 8, 8, 0xE0);           // 纯红（左上，检查行首）
-
-    // 6) 输出
-    FILE *f = fopen("fb0.bin", "wb");
-    if (!f) { perror("fb0.bin"); return 1; }
-    if (fwrite(fb, 1, sizeof fb, f) != sizeof fb) { perror("fwrite"); fclose(f); return 1; }
-    fclose(f);
-
-    if (write_ppm("expected.ppm") != 0) return 1;
-
-    // 7) 统计
+static void report(const char *name) {
     int n_bg = 0, n_tile = 0, n_text = 0, n_other = 0;
     for (int i = 0; i < W * H; i++) {
         switch (fb[i]) {
@@ -154,9 +167,18 @@ int main(void) {
             default:       n_other++; break;
         }
     }
-    printf("fb0.bin       : %d x %d = %d 字节\n", W, H, W * H);
-    printf("expected.ppm  : RGB888 展开\n");
-    printf("配色统计      : 背景 %d, 色块 %d, 文字 %d, 其它 %d\n", n_bg, n_tile, n_text, n_other);
+    printf("%s: 背景 %d, 色块 %d, 文字 %d, 其它 %d\n", name, n_bg, n_tile, n_text, n_other);
+}
 
+int main(void) {
+    draw_frame(0);
+    if (write_files("fb0.bin", "expected.ppm") != 0) return 1;
+    report("FB0");
+
+    draw_frame(1);
+    if (write_files("fb1.bin", "expected1.ppm") != 0) return 1;
+    report("FB1");
+
+    printf("尺寸: %d x %d, 每帧 %d 字节\n", W, H, W * H);
     return 0;
 }

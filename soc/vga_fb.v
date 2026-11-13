@@ -57,6 +57,10 @@ module vga_fb #(
     // 800 像素 / 4 像素每字 = 200 字，因此每进入下一有效行加 200。
     reg [19:0] line_word_base;
 
+    // fb_sel 打一拍，用于检测翻页时刻：显存基址在消隐区变化后，
+    // 必须立刻为新缓冲补一次 word0 预取，否则下一帧前 4 个像素仍来自旧缓冲。
+    reg fb_sel_q;
+
     wire in_active_x = (hcnt <= H_ACTIVE_LAST);
     wire in_active_y = (vcnt < V_ACTIVE[9:0]);
     wire in_active   = in_active_x && in_active_y;
@@ -76,9 +80,11 @@ module vga_fb #(
             hcnt          <= 11'd0;
             vcnt          <= 10'd0;
             line_word_base <= 20'd0;
+            fb_sel_q      <= fb_sel;
         end else if (hcnt == H_TOTAL_LAST) begin
             hcnt <= 11'd0;
 
+            fb_sel_q <= fb_sel;
             if (vcnt == V_TOTAL_LAST) begin
                 vcnt           <= 10'd0;
                 line_word_base <= 20'd0;
@@ -93,15 +99,18 @@ module vga_fb #(
                     line_word_base <= 20'd0;
             end
         end else begin
-            hcnt <= hcnt + 11'd1;
+            hcnt     <= hcnt + 11'd1;
+            fb_sel_q <= fb_sel;
         end
     end
 
+    wire fb_sel_changed = (fb_sel != fb_sel_q);
+
     // RAM 一拍延迟，所以在每组第 4 个像素时预取下一组。
     // 复位期间预取当前帧的第一个字，保证解除复位后第一组像素也有数据。
-    assign ram_addr = rst ? selected_word_base
-                          : selected_word_base + wrapped_word_offset;
-    assign ram_req  = rst || (in_active && (hcnt[1:0] == 2'b11));
+    assign ram_addr = (rst || fb_sel_changed) ? selected_word_base
+                                              : selected_word_base + wrapped_word_offset;
+    assign ram_req  = rst || fb_sel_changed || (in_active && (hcnt[1:0] == 2'b11));
 
     // ------------------------------------------------------------ 像素拆包
     reg [7:0] pixel_rgb332;

@@ -99,6 +99,7 @@ make pattern    # 只生成 build/fb0.bin 与 build/expected.ppm
 make lint       # Verilator -Wall 语法/告警检查
 make run        # 仿真，输出 build/actual.ppm + 时序报告
 make compare    # 只做图片对比
+make flip       # 翻页测试：先采 FB0，再在 vsync 翻到 FB1 采第二帧，两帧都比对
 make wave       # 导出 6000 拍波形并用 GTKWave 打开
 make clean
 ```
@@ -124,6 +125,8 @@ make clean
 1. `hsync` 宽 120、周期 1040；`vsync` 宽 6240、周期 692640 → 全 PASS
 2. 每行 800 个有效像素，共 600 行，无异常行
 3. `actual.ppm` 与 `expected.ppm` 逐像素一致（`compare.py` 返回 0）
+4. `make flip`：`actual0.ppm` 对 `expected.ppm`、`actual1.ppm` 对 `expected1.ppm`
+   都要逐像素一致——这一条专门验证 `fb_sel` 翻页后**整帧**来自新缓冲
 
 > 这套判定是"有效"的：故意篡改 `fb0.hex` 里的 1 个字后，`compare.py` 能精确报到
 > `x 0..0, y 150..150`、1 个像素不一致——说明地址映射与比较链路没有自欺。
@@ -137,8 +140,8 @@ make clean
 ```bash
 make clean
 make lint DUT="vga/dut_vga_fb.v ../soc/vga_fb.v"
-make run DUT="vga/dut_vga_fb.v ../soc/vga_fb.v"
-make compare DUT="vga/dut_vga_fb.v ../soc/vga_fb.v"
+make run  DUT="vga/dut_vga_fb.v ../soc/vga_fb.v"
+make flip DUT="vga/dut_vga_fb.v ../soc/vga_fb.v"   # 翻页：FB0 -> FB1
 ```
 
 这个核心实现了 800x600@72.19 Hz 扫描、RGB332 四像素打包、FB0/FB1 选择和 RAM 一拍读延迟。接入整机时，`ram_addr/ram_req/ram_rdata` 需要连接到 CPU/DVI 共用的 ExtRAM 仲裁器。
@@ -184,8 +187,9 @@ make DUT="vga/dut_my_vga.v ../soc/my_dvi_top.v"
    也没有与 CPU 的 ExtRAM 端口仲裁——这些属于 Phase 2/3。
 2. **复位后第一帧前 4 个像素无效**（RAM 预取尚未完成），所以 harness 从第 2 个 vsync
    开始采集；正式模块也应注意上电首帧。
-3. **只验证单帧静态画面**：动画/翻页（`fb_sel` 切换、`vsync_start` 握手）尚未覆盖。
-4. 测试数据只装在 FB0；`fb_sel=1` 时读到的是全 0（可用于负向测试）。
+3. **翻页只在测试台里直接拨 `fb_sel`**：真实设计由 confreg 在 `vsync_start` 翻转，
+   `vga_fb.v` 目前没有输出 `vsync_start` 脉冲（接整机时要补这个端口）。
+4. 测试数据 FB0/FB1 都装了；`make flip` 会依次采集两帧做比对。
 5. 图案配色沿用 `docs/design.md` 的 `0x6D / 0xEF / 0x00`。注意：按
    `{R[2:0],G[2:0],B[1:0]}` 位定义，`0xEF` 展开是 (255,109,255) **品红**，
    文档里写的 "R224 G224 B192 米白" 实际对应 `0xFF`——上板前建议统一口径。

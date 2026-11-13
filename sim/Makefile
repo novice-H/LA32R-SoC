@@ -50,7 +50,7 @@ pattern: $(BUILD)/vga_pattern
 
 # ---------------------------------------------------------------- 转 mem
 $(BUILD)/fb0.hex: pattern
-	python3 $(VGA)/gen_mem.py $(BUILD)/fb0.bin $(BUILD)/fb0.hex
+	python3 $(VGA)/gen_mem.py $(BUILD)/fb0.bin $(BUILD)/fb1.bin $(BUILD)/fb0.hex
 
 mem: $(BUILD)/fb0.hex
 
@@ -72,6 +72,14 @@ run: sim
 compare: run
 	python3 $(VGA)/compare.py $(BUILD)/expected.ppm $(BUILD)/actual.ppm $(BUILD) | tee $(BUILD)/vga_compare.txt
 
+# ---------------------------------------------------------------- 翻页测试
+# 先采 FB0 一帧，在 vsync 处把 fb_sel 翻到 FB1，再采一帧，两帧都比对。
+flip: mem
+	$(VERILATOR) $(VFLAGS) $(RTL) $(CSRC) -o Vtb_vga_top --Mdir $(OBJ)
+	cd $(BUILD) && $(BIN) +flip | tee vga_flip.txt
+	python3 $(VGA)/compare.py $(BUILD)/expected.ppm  $(BUILD)/actual0.ppm $(BUILD) fb0_ | tee $(BUILD)/vga_compare0.txt
+	python3 $(VGA)/compare.py $(BUILD)/expected1.ppm $(BUILD)/actual1.ppm $(BUILD) fb1_ | tee $(BUILD)/vga_compare1.txt
+
 # ---------------------------------------------------------------- 波形
 wave: mem
 	$(VERILATOR) $(VFLAGS) --trace $(RTL) $(CSRC) -o Vtb_vga_top --Mdir $(OBJ_TRACE)
@@ -80,9 +88,13 @@ wave: mem
 
 clean:
 	rm -rf $(OBJ) $(OBJ_TRACE)
-	rm -f $(BUILD)/vga_pattern $(BUILD)/fb0.bin $(BUILD)/fb0.hex \
-	      $(BUILD)/expected.ppm $(BUILD)/actual.ppm \
+	rm -f $(BUILD)/vga_pattern $(BUILD)/fb0.bin $(BUILD)/fb1.bin $(BUILD)/fb0.hex \
+	      $(BUILD)/expected.ppm $(BUILD)/expected1.ppm \
+	      $(BUILD)/actual.ppm $(BUILD)/actual0.ppm $(BUILD)/actual1.ppm \
 	      $(BUILD)/side_by_side.png $(BUILD)/diff.png \
-	      $(BUILD)/vga.vcd $(BUILD)/vga_timing.txt $(BUILD)/vga_compare.txt
+	      $(BUILD)/fb0_side_by_side.png $(BUILD)/fb0_diff.png \
+	      $(BUILD)/fb1_side_by_side.png $(BUILD)/fb1_diff.png \
+	      $(BUILD)/vga.vcd $(BUILD)/vga_timing.txt $(BUILD)/vga_compare.txt \
+	      $(BUILD)/vga_flip.txt $(BUILD)/vga_compare0.txt $(BUILD)/vga_compare1.txt
 
-.PHONY: all pattern mem lint sim run compare wave clean
+.PHONY: all pattern mem lint sim run compare flip wave clean
