@@ -46,7 +46,7 @@ module vga_fb #(
     localparam [10:0] H_TOTAL_LAST = H_TOTAL[10:0] - 11'd1;
     localparam [9:0]  V_TOTAL_LAST = V_TOTAL[9:0] - 10'd1;
     localparam [10:0] H_ACTIVE_LAST = H_ACTIVE[10:0] - 11'd1;
-    localparam [19:0] WORDS_PER_LINE = H_ACTIVE / 4;
+    localparam [19:0] WORDS_PER_LINE = H_ACTIVE[19:0] / 20'd4;
     localparam [19:0] FB_WORDS_CONST = FB_WORDS[19:0];
     localparam [19:0] FB1_BASE_CONST = FB1_WORD_BASE[19:0];
 
