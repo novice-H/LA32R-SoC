@@ -9,8 +9,11 @@
 //   1. clk 同时作为系统时钟和像素时钟，频率 50 MHz；
 //   2. hcnt/vcnt 产生 1040x666 的完整扫描时序；
 //   3. 有效区中的 4 个连续 RGB332 像素打包在一个 32 位字中；
-//   4. RAM 为同步读，ram_rdata 在 ram_req 后一拍有效；
-//   5. ram_addr 是 32 位字地址，不是字节地址。
+//   4. RAM 侧经过 ExtRAM 仲裁器 + 异步 SRAM 控制器，ram_req 后 **2 拍**有效；
+//   5. ram_addr 是 32 位字地址，不是字节地址；
+//   6. 因此请求点提前到像素组的第 3 拍（hcnt%4==2），数据正好在下一组开始前到位；
+//      dvi_next 是提前一拍的预警，给仲裁器留出挡 CPU 的时间。
+//   7. vsync_start 是进入垂直消隐区的单拍脉冲，给 confreg 翻页用。
 //
 // CPU 不直接连接本模块。CPU 和本模块分别通过 ExtRAM 控制器访问帧缓冲，
 // 具体的双主机仲裁放在上层 SoC 中。
@@ -40,7 +43,12 @@ module vga_fb #(
     output wire [1:0]  vga_blue,
     output wire        vga_hsync,
     output wire        vga_vsync,
-    output wire        vga_de
+    output wire        vga_de,
+
+    // 进入垂直消隐区（vcnt==V_ACTIVE, hcnt==0）的单拍脉冲，给 confreg 翻页用
+    output wire        vsync_start,
+    // 下一拍将发出 ram_req，供 ExtRAM 仲裁器提前挡掉 CPU
+    output wire        dvi_next
 );
 
     localparam [10:0] H_TOTAL_LAST = H_TOTAL[10:0] - 11'd1;
@@ -68,7 +76,8 @@ module vga_fb #(
 
     // 当前 hcnt 所在的 4 像素组之后的下一个字地址。
     // 例如 hcnt=3 时，下一组是字 1；hcnt=799 时，下一行是字 200。
-    wire [19:0] next_word_in_line = ({9'd0, hcnt} + 20'd1) >> 2;
+    // 请求点提前到组内第 3 个像素（hcnt%4==2），2 拍后正好是下一组开头
+    wire [19:0] next_word_in_line = ({9'd0, hcnt} + 20'd2) >> 2;
     wire [19:0] next_word_offset  = line_word_base + next_word_in_line;
     wire [19:0] wrapped_word_offset =
         (next_word_offset >= FB_WORDS_CONST) ? 20'd0 : next_word_offset;
@@ -110,7 +119,13 @@ module vga_fb #(
     // 复位期间预取当前帧的第一个字，保证解除复位后第一组像素也有数据。
     assign ram_addr = (rst || fb_sel_changed) ? selected_word_base
                                               : selected_word_base + wrapped_word_offset;
-    assign ram_req  = rst || fb_sel_changed || (in_active && (hcnt[1:0] == 2'b11));
+    assign ram_req  = rst || fb_sel_changed || (in_active && (hcnt[1:0] == 2'd2));
+
+    // 提前一拍给仲裁器：下一拍是 ram_req
+    assign dvi_next = !rst && in_active && (hcnt[1:0] == 2'd1);
+
+    // 垂直消隐起点：vcnt==V_ACTIVE 那一行的第一个像素时钟
+    assign vsync_start = !rst && (hcnt == 11'd0) && (vcnt == V_ACTIVE[9:0]);
 
     // ------------------------------------------------------------ 像素拆包
     reg [7:0] pixel_rgb332;

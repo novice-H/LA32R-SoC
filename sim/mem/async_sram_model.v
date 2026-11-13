@@ -10,7 +10,10 @@
 //   * data 为双向总线，非读窗口时输出高阻
 // ---------------------------------------------------------------------------
 module async_sram_model #(
-    parameter integer WORDS = 1024
+    parameter integer WORDS     = 1024,
+    parameter         LOAD_INIT = 1'b0,        // 1: 用 INIT_FILE 预装；0: 填 FILL_WORD
+    parameter         INIT_FILE = "fb0.hex",
+    parameter [31:0]  FILL_WORD = 32'hdead_beef
 )(
     input  wire        clk,
     input  wire [19:0] addr,
@@ -29,7 +32,8 @@ module async_sram_model #(
     wire [ADDR_W-1:0] a = addr[ADDR_W-1:0];
 
     initial begin
-        for (i = 0; i < WORDS; i = i + 1) mem[i] = 32'hdead_beef;
+        for (i = 0; i < WORDS; i = i + 1) mem[i] = FILL_WORD;
+        if (LOAD_INIT) $readmemh(INIT_FILE, mem);
     end
 
     assign data = (!ce_n && !oe_n && we_n) ? mem[a] : 32'bz;

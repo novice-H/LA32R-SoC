@@ -21,6 +21,8 @@ ROOT      := $(abspath ..)
 SIM       := $(abspath .)
 BUILD     := $(ROOT)/build
 VGA       := $(SIM)/vga
+MEM       := $(ROOT)/soc/mem
+SRAM_MODEL:= $(SIM)/mem/async_sram_model.v
 OBJ       := $(BUILD)/obj_vga
 BIN       := $(OBJ)/Vtb_vga_top
 OBJ_TRACE := $(BUILD)/obj_vga_trace
@@ -32,8 +34,10 @@ CC        ?= cc
 # 待测模块：默认用占位实现；换成自己的 VGA 模块时覆盖此变量
 DUT ?= $(VGA)/dut_placeholder.v
 
-VFLAGS := --cc --exe --build -j 0 --top-module tb_vga_top -O2 -Wno-fatal
-RTL    := $(VGA)/tb_vga_top.v $(VGA)/ram_model.v $(DUT)
+VFLAGS := --cc --exe --build -j 0 -DSIMU --top-module tb_vga_top -O2 -Wno-fatal
+RTL    := $(VGA)/tb_vga_top.v $(VGA)/cpu_noise.v $(SRAM_MODEL) \
+          $(MEM)/sram_ctrl.v $(MEM)/base_ram_ctrl.v $(MEM)/ext_ram_ctrl.v \
+          $(MEM)/ext_ram_arbiter.v $(DUT)
 CSRC   := $(VGA)/tb_main.cpp
 
 all: compare
@@ -57,8 +61,8 @@ mem: $(BUILD)/fb0.hex
 # ---------------------------------------------------------------- 检查
 lint: mem
 	# -Wno-DECLFILENAME：DUT 包装文件与模块名 vga_dut 不同是契约要求
-	$(VERILATOR) --lint-only -Wall -Wno-DECLFILENAME --top-module tb_vga_top \
-	    $(VGA)/tb_vga_top.v $(VGA)/ram_model.v $(DUT)
+	$(VERILATOR) --lint-only -Wall -Wno-DECLFILENAME -Wno-BLKSEQ --timing -DSIMU \
+	    --top-module tb_vga_top $(RTL)
 
 # ---------------------------------------------------------------- 编译仿真
 sim: mem

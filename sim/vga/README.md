@@ -16,27 +16,30 @@ sim/
 ├── Makefile               # 全流程入口
 └── vga/
     ├── README.md          # 本文件
-    ├── tb_vga_top.v       # 仿真顶层：ram_model + vga_dut
-    ├── ram_model.v        # 4 MB ExtRAM 模型（1 拍读延迟，$readmemh 初始化）
+    ├── tb_vga_top.v       # 仿真顶层：真实存储链路 + CPU 噪声主机 + DVI 监视
+    ├── cpu_noise.v        # 仿真用 CPU 主机：持续读写/校验，制造 ExtRAM 争用
     ├── dut_placeholder.v  # 【占位】最小可用 DUT，跑通环境用
     ├── tb_main.cpp        # Verilator tb：采集、重建 PPM、时序断言
     ├── gen_mem.py         # fb0.bin → fb0.hex（32 位小端字）
     └── compare.py         # 预期 vs 实测：并排图 + 差异图 + 一致率
 ```
 
-数据流：
+数据流（**走的是真实存储链路，不是理想 RAM 模型**）：
 
 ```
-ref/vga_pattern.c ──► fb0.bin ──gen_mem.py──► fb0.hex ──$readmemh──► ram_model
-                                                                       │
-                                          vga_dut ◄──ram_rdata/ram_req─┘
-                                              │
-                                     RGB332 + hsync/vsync/de
-                                              │
-                                   tb_main.cpp（像显示器一样重建）
-                                              ▼
-                             actual.ppm ──compare.py──► side_by_side.png / diff.png
+ref/vga_pattern.c ──► fb0.bin/fb1.bin ──gen_mem.py──► fb0.hex ──$readmemh──► 异步 SRAM 模型
+                                                                                  ▲
+                          vga_dut ──DVI──► ext_ram_arbiter ──► ext_ram_ctrl ──────┘
+                             ▲                      ▲
+                        RGB/同步               cpu_noise（持续制造 CPU 争用）
+                             │
+                    tb_main.cpp（像显示器一样重建）
+                             ▼
+              actual0/1.ppm ──compare.py──► side_by_side.png / diff.png
 ```
+
+即 `sim/mem/async_sram_model.v` + `soc/mem/ext_ram_ctrl.v`（2 拍延迟）
++ `soc/mem/ext_ram_arbiter.v`（DVI 优先仲裁），与上板路径一致。
 
 **关键设计**：testbench 只看 DUT 的输出端口，不读任何内部信号。因此"画面与预期一致"
 本身就意味着时序、地址、字节序全对。
@@ -54,13 +57,15 @@ ref/vga_pattern.c ──► fb0.bin ──gen_mem.py──► fb0.hex ──$rea
 | `fb_sel` | in | 1 | 0 = FB0（`0xA000_0000`），1 = FB1（`0xA008_0000`） |
 | `ram_addr` | out | 20 | ExtRAM **字**地址 |
 | `ram_req` | out | 1 | 读请求，单拍有效 |
-| `ram_rdata` | in | 32 | 读数据，**请求后下一拍**有效 |
+| `ram_rdata` | in | 32 | 读数据，经仲裁器 + 控制器后 **2 拍**有效并被保持 |
 | `vga_red` | out | 3 | RGB332 红 |
 | `vga_green` | out | 3 | RGB332 绿 |
 | `vga_blue` | out | 2 | RGB332 蓝 |
 | `vga_hsync` | out | 1 | 行同步，正极性 |
 | `vga_vsync` | out | 1 | 场同步，正极性 |
 | `vga_de` | out | 1 | 有效像素区 |
+| `vsync_start` | out | 1 | 进入垂直消隐区的单拍脉冲（`vcnt==600 && hcnt==0`），给 confreg 翻页用 |
+| `dvi_next` | out | 1 | 提前一拍预告 `ram_req`，供仲裁器提前挡掉 CPU |
 
 ### 2.1 时序规格（与 `thinpad_top.v` 的 `vga #(12,800,856,976,1040,600,637,643,666,1,1)` 一致）
 
@@ -83,9 +88,12 @@ ref/vga_pattern.c ──► fb0.bin ──gen_mem.py──► fb0.hex ──$rea
 
 ### 2.3 读时序约定
 
-RAM 是**同步读、1 拍延迟**：`ram_req` 与 `ram_addr` 的当拍组合值被采样，`ram_rdata`
-在下一拍给出。DUT 需自行处理预取/流水，占位实现的做法（每组第 4 个像素那拍发下一组
-地址）可直接参考。
+仿真与上板一致：`vga_dut → ext_ram_arbiter → ext_ram_ctrl → 异步 SRAM`，控制器是
+**2 拍延迟**（发地址 → 访问窗口 → 响应）。因此 DUT 要在像素组第 3 拍
+（`hcnt%4==2`）就发出下一组地址，数据正好在下一组开头前到位并被保持。
+
+`dvi_next` 提前一拍给出预警，仲裁器据此把 CPU 请求挡在 DVI 请求前一拍之外，
+保证 DVI 零等待；CPU 只能在每 4 拍的窗口里拿到空闲拍。
 
 ---
 
@@ -127,9 +135,14 @@ make clean
 3. `actual.ppm` 与 `expected.ppm` 逐像素一致（`compare.py` 返回 0）
 4. `make flip`：`actual0.ppm` 对 `expected.ppm`、`actual1.ppm` 对 `expected1.ppm`
    都要逐像素一致——这一条专门验证 `fb_sel` 翻页后**整帧**来自新缓冲
+5. `vsync_start`：每帧恰好 1 个脉冲、宽 1 拍、周期 692640
+6. **DVI 请求零丢弃**：每个 `dvi_req` 都拿到授权；响应严格 2 拍后到达
+   （`req_cnt == rsp_cnt`、`stall == 0`、`latency_err == 0`）
+7. **CPU 不被饿死**：`cpu_noise` 授权数 > 0，且读写校验 0 错误
 
-> 这套判定是"有效"的：故意篡改 `fb0.hex` 里的 1 个字后，`compare.py` 能精确报到
-> `x 0..0, y 150..150`、1 个像素不一致——说明地址映射与比较链路没有自欺。
+> 这套判定是"有效"的：已经用它抓到并修复了两个真实 bug——
+> ① 翻页后首字仍来自旧缓冲（差 4 像素）；② 上电瞬间控制器误写内存 0 号字
+> （`SIMU` 防误写保护未开启，导致 FB0 左上角变黑）。
 
 ---
 
@@ -183,14 +196,16 @@ make DUT="vga/dut_my_vga.v ../soc/my_dvi_top.v"
 
 ## 6. 已知限制（后续阶段再补）
 
-1. **占位实现不是最终设计**：没有 `docs/design.md` 要求的 2 行 FIFO 乒乓预取，
-   也没有与 CPU 的 ExtRAM 端口仲裁——这些属于 Phase 2/3。
-2. **复位后第一帧前 4 个像素无效**（RAM 预取尚未完成），所以 harness 从第 2 个 vsync
-   开始采集；正式模块也应注意上电首帧。
-3. **翻页只在测试台里直接拨 `fb_sel`**：真实设计由 confreg 在 `vsync_start` 翻转，
-   `vga_fb.v` 目前没有输出 `vsync_start` 脉冲（接整机时要补这个端口）。
-4. 测试数据 FB0/FB1 都装了；`make flip` 会依次采集两帧做比对。
-5. 图案配色沿用 `docs/design.md` 的 `0x6D / 0xEF / 0x00`。注意：按
+1. **没有 2 行 FIFO 乒乓预取**：靠"提前一拍请求 + 仲裁器挡 CPU"保证实时性，
+   CPU 在每组 4 拍里只能拿到 1 个空闲拍（约 25% 带宽）。若以后 CPU 带宽不够，
+   再补 FIFO，接口不用变。
+2. **翻页**：测试台直接拨 `fb_sel` 模拟 confreg；`vga_fb` 已能处理翻页（补取新基址
+   word0）并输出 `vsync_start`，接 confreg 时把两者对接即可。
+3. **CPU 争用已覆盖**：`cpu_noise` 持续读写高地址区，仿真校验其读回正确且不被饿死，
+   同时两帧图像必须 100% 一致。
+5. **vsync_start 已输出**：`(hcnt==0 && vcnt==600)` 的单拍脉冲，周期与场周期一致，
+   仿真里已逐项校验；confreg 接进来后直接用它翻转 `fb_sel`。
+6. 图案配色沿用 `docs/design.md` 的 `0x6D / 0xEF / 0x00`。注意：按
    `{R[2:0],G[2:0],B[1:0]}` 位定义，`0xEF` 展开是 (255,109,255) **品红**，
    文档里写的 "R224 G224 B192 米白" 实际对应 `0xFF`——上板前建议统一口径。
 

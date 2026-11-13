@@ -13,7 +13,9 @@ module vga_dut (
     output wire [1:0]  vga_blue,
     output wire        vga_hsync,
     output wire        vga_vsync,
-    output wire        vga_de
+    output wire        vga_de,
+    output wire        vsync_start,
+    output wire        dvi_next
 );
     vga_fb u_vga_fb (
         .clk       (clk),
@@ -27,7 +29,9 @@ module vga_dut (
         .vga_blue  (vga_blue),
         .vga_hsync (vga_hsync),
         .vga_vsync (vga_vsync),
-        .vga_de    (vga_de)
+        .vga_de    (vga_de),
+        .vsync_start(vsync_start),
+        .dvi_next  (dvi_next)
     );
 endmodule
 

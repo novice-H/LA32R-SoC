@@ -80,19 +80,23 @@ int main(int argc, char** argv) {
     }
 #endif
 
-    dut->clk = 0; dut->rst = 1; dut->fb_sel = 0;
+    dut->clk = 0; dut->rst = 1; dut->fb_sel = 0; dut->noise_en = 0;
     for (int i = 0; i < 4; i++) { dut->clk = 1; dut->eval(); dut->clk = 0; dut->eval(); }
     dut->rst = 0;
+    dut->noise_en = 1;              // CPU 噪声主机同时工作，验证仲裁下画面不受影响
 
     // phase: 0=等第 2 个 vsync，1=采第 1 帧，2=等翻页，3=采第 2 帧，4=完成
     int phase = 0;
     int vs_rises = 0;
-    bool prev_hs = false, prev_vs = false;
+    bool prev_hs = false, prev_vs = false, prev_vst = false;
     int hs_hi = 0, vs_hi = 0;
     long hs_width = -1, vs_width = -1, hs_period = -1, vs_period = -1;
     long last_h_rise = -1, last_v_rise = -1;
+    int  vst_hi = 0, vst_count = 0;
+    long vst_width = -1, vst_period = -1, last_vst_rise = -1;
     long cyc = 0;
     int cur_line = 0;
+    int finish_delay = -1;
 
     std::vector<uint8_t> f0, f1;
     std::vector<int> lines0, lines1;
@@ -115,6 +119,14 @@ int main(int argc, char** argv) {
         if (vs) vs_hi++; else { if (vs_hi) { vs_width = vs_hi; vs_hi = 0; } }
         if (hs && !prev_hs) { if (last_h_rise >= 0) hs_period = cyc - last_h_rise; last_h_rise = cyc; }
         if (vs && !prev_vs) { if (last_v_rise >= 0) vs_period = cyc - last_v_rise; last_v_rise = cyc; }
+
+        bool vst = dut->vsync_start;
+        if (vst) vst_hi++; else { if (vst_hi) { vst_width = vst_hi; vst_hi = 0; } }
+        if (vst && !prev_vst) {
+            if (last_vst_rise >= 0) vst_period = cyc - last_vst_rise;
+            last_vst_rise = cyc;
+            vst_count++;
+        }
 
         if (vs && !prev_vs) {
             vs_rises++;
@@ -149,12 +161,15 @@ int main(int argc, char** argv) {
             }
         }
 
-        if (phase == 4) break;
+        // 帧结束后多跑几拍，等最后一条 DVI 预取请求的响应回来
+        if (phase == 4 && finish_delay < 0) finish_delay = 3;
+        if (finish_delay > 0) { finish_delay--; if (finish_delay == 0) break; }
         if (trace_cycles > 0 && cyc >= trace_cycles) break;
 
         dut->clk = 0; dut->eval();
         prev_hs = hs;
         prev_vs = vs;
+        prev_vst = vst;
     }
 
     if (trace_cycles > 0 && cyc >= trace_cycles) {
@@ -198,9 +213,24 @@ int main(int argc, char** argv) {
     std::printf("vsync 宽度    : %ld  (期望 %ld) %s\n", vs_width, 6 * H_TOTAL, vs_width == 6 * H_TOTAL ? "PASS" : "FAIL");
     std::printf("vsync 周期    : %ld  (期望 %ld) %s\n", vs_period, V_TOTAL * H_TOTAL, vs_period == V_TOTAL * H_TOTAL ? "PASS" : "FAIL");
     std::printf("刷新率        : %.2f Hz\n", 50e6 / ((double)H_TOTAL * V_TOTAL));
+    std::printf("vsync_start   : %d 次脉冲, 宽度 %ld (期望 1), 周期 %ld (期望 %ld) %s\n",
+                vst_count, vst_width, vst_period, V_TOTAL * H_TOTAL,
+                (vst_width == 1 && vst_period == V_TOTAL * H_TOTAL) ? "PASS" : "FAIL");
+    std::printf("CPU 噪声      : %u 次授权, %u 次读回错误 %s\n",
+                (unsigned)dut->noise_grants, (unsigned)dut->noise_errors,
+                (dut->noise_errors == 0 && dut->noise_grants != 0) ? "PASS" : "FAIL");
+    std::printf("DVI 请求/响应 : %u / %u, 被丢 %u, 延迟错 %u %s\n",
+                (unsigned)dut->dvi_reqs, (unsigned)dut->dvi_rsps,
+                (unsigned)dut->dvi_stalls, (unsigned)dut->dvi_latency_err,
+                (dut->dvi_stalls == 0 && dut->dvi_latency_err == 0 &&
+                 dut->dvi_reqs == dut->dvi_rsps && dut->dvi_reqs != 0) ? "PASS" : "FAIL");
 
     if (hs_width != 120 || hs_period != H_TOTAL || vs_width != 6 * H_TOTAL ||
-        vs_period != V_TOTAL * H_TOTAL || bad != 0) ok = false;
+        vs_period != V_TOTAL * H_TOTAL || bad != 0 ||
+        vst_width != 1 || vst_period != V_TOTAL * H_TOTAL ||
+        dut->noise_errors != 0 || dut->noise_grants == 0 ||
+        dut->dvi_stalls != 0 || dut->dvi_latency_err != 0 ||
+        dut->dvi_reqs != dut->dvi_rsps || dut->dvi_reqs == 0) ok = false;
 
     std::printf("\n结果: %s\n", ok ? "PASS（时序正确，图像已导出）" : "FAIL");
     dut->final(); delete dut;

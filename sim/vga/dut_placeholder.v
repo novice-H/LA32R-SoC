@@ -49,7 +49,9 @@ module vga_dut #(
     output wire [1:0]  vga_blue,
     output wire        vga_hsync,
     output wire        vga_vsync,
-    output wire        vga_de
+    output wire        vga_de,
+    output wire        vsync_start,
+    output wire        dvi_next
 );
 
     // 定宽常量，避免与 11/10 位计数器比较时的位宽扩展告警
@@ -86,13 +88,25 @@ module vga_dut #(
     // 下一像素组的字偏移（FB 内线性字节偏移 / 4）
     wire [19:0] line_base = vcnt * H_ACT;
     wire [19:0] h_ext     = {9'd0, hcnt};
-    wire [19:0] word_idx  = (line_base + h_ext + 20'd1) >> 2;
+    wire [19:0] word_idx  = (line_base + h_ext + 20'd2) >> 2;
     // 越界（帧尾回卷）时预取第 0 字，保证下一帧第一组像素正确
     wire [19:0] word_off  = (word_idx >= FBW) ? 20'd0 : word_idx;
     wire [19:0] word_abs  = word_off + (fb_sel ? FB1 : 20'd0);
 
-    assign ram_addr = word_abs;
-    assign ram_req  = (hcnt <= H_LAST) && (hcnt[1:0] == 2'b11);
+    // fb_sel 变化时按新基址重新预取 word0（翻页后首字不能来自旧缓冲）
+    reg fb_sel_q;
+    always @(posedge clk) begin
+        if (rst) fb_sel_q <= fb_sel;
+        else     fb_sel_q <= fb_sel;
+    end
+    wire fb_sel_changed = (fb_sel != fb_sel_q);
+    wire [19:0] sel_base = fb_sel ? FB1 : 20'd0;
+
+    assign ram_addr = (rst || fb_sel_changed) ? sel_base : word_abs;
+    assign ram_req  = rst || fb_sel_changed || ((hcnt <= H_LAST) && (hcnt[1:0] == 2'd2));
+
+    assign dvi_next    = !rst && (hcnt <= H_LAST) && (hcnt[1:0] == 2'd1);
+    assign vsync_start = !rst && (hcnt == 11'd0) && (vcnt == V_ACT);
 
     // ------------------------------------------------------------ 像素选择
     reg [7:0] pix;

@@ -190,3 +190,47 @@ make -C sim/mem lint   # Verilator -Wall 检查
 - 上电不产生"幽灵写"（`SIMU` 下的 initial 保护，原设计同款）
 
 输出 `RESULT: PASS` 即通过。
+
+---
+
+## 6. ExtRAM 仲裁器（`ext_ram_arbiter.v`）
+
+ExtRAM 有两个主机：CPU（读写）和 DVI（每 4 像素读 1 字）。控制器是单口的，
+所以两者之间需要一个仲裁器。
+
+### 6.1 端口
+
+```verilog
+ext_ram_arbiter u_arb (
+    .clk, .rst,
+    // DVI 侧
+    .dvi_req, .dvi_next, .dvi_addr, .dvi_ready, .dvi_rdata, .dvi_rsp_valid,
+    // CPU 侧
+    .cpu_req, .cpu_addr, .cpu_we, .cpu_be_n, .cpu_wdata,
+    .cpu_ready, .cpu_rsp_rdata, .cpu_rsp_valid,
+    // 控制器侧
+    .mem_req, .mem_addr, .mem_we, .mem_be_n, .mem_wdata,
+    .mem_ready, .mem_rsp_valid, .mem_rsp_rdata
+);
+```
+
+### 6.2 仲裁策略
+
+- **DVI 绝对优先**：`dvi_req` 当拍即授予，保证响应 2 拍后正好落在像素组开头；
+- **提前一拍预警**：`dvi_next` 是 `dvi_req` 的前一拍；CPU 在 `dvi_next` 和 `dvi_req`
+  这两拍都不许启动，否则会把控制器占住、让 DVI 晚一拍拿到数据；
+- **CPU 结果**：每 4 个像素最多拿到 1 个空闲拍（约 25% 带宽），足够刷 2048 的静态棋盘；
+  请求通过 `cpu_ready` 单拍握手，未授予时保持 `req` 即可；
+- **数据保持**：`dvi_rdata` 是"响应当拍透传、其余保持"的寄存器输出，CPU 的响应即使插在
+  像素组中间，也不会改写 DVI 正在扫描的那个字。
+
+### 6.3 已验证的指标
+
+`sim/vga` 用真实链路（`vga_fb + 仲裁器 + 控制器 + 异步 SRAM`）+ CPU 噪声主机验证：
+
+- DVI 请求 480001 次，全部授权，0 次被丢，0 次延迟错误；
+- CPU 噪声 70 万次授权，读写校验 0 错误；
+- 两帧画面 100% 匹配预期。
+
+> 注意：仲裁器假设 `fb_sel` 翻页发生在消隐区（confreg 在 `vsync_start` 翻转），
+> 与 `docs/design.md` 2.2.7.3 的约定一致。
