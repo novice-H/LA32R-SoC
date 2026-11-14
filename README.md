@@ -2,6 +2,8 @@
 
 ## 当前状态（2026-11-14）
 
+本次按键映射交付：**BTN1=上、BTN2=下、BTN3=左、BTN4=右**。远程平台上传仓库根目录的 [game2048_release/game.bin](game2048_release/game.bin)，游玩步骤见 [game_play.md](game2048_release/game_play.md)。新固件为 7080 B，SHA256 `a5cfb00baff35af86bacd50e74e1562cb056c965e33040b69e47724232177ac7`；本轮 CPU 输入 12 场景/49 项检查，以及新生产镜像启动和 BTN3/Left 集成检查均通过。
+
 最新硬件提交 `8ec0463` 已通过 `eae1d4c` 合并至 `game2048`，交付首版 [thinpad_top.bit](vivado/artifacts/thinpad_top.bit) 并修复 Vivado 构建流程。当前 `thinpad_top` 已接入 `soc_top`，形成 openLA500 CPU、AXI 参考从桥、地址译码、BaseRAM/ExtRAM 控制器、显示仲裁器、confreg 和帧缓冲扫描的完整 RTL 链路。软件手动 2048 已通过 PC 测试与用户试玩；LA32R 完整游戏固件和 CPU 整机回放均已通过仿真验收，远程实机运行待平台上传验收。
 
 | 已接入资源 | 当前配置 |
@@ -25,7 +27,7 @@ confreg/MMIO 和按键输入驱动已实现，CPU 输入整机测试的 12 个�
 
 RGB332 绘制、8×16 数字字模和双缓冲翻页驱动已实现。CPU 完整采集两幅画面共 960000 像素并全部匹配参考，4 次 VSYNC 翻页和超时恢复通过，结果见本地 [显示测试交付](outputs/framebuffer-20261114-v1/README.md)。实现借鉴用户已报告上板 VGA 验证的提交 `2103134`，本轮保持当前 RTL。
 
-完整固件目标 `make -C sw firmware` 生成生产 `game.bin` 及 ELF/HEX/map/反汇编/符号信息；默认 `GAME_SEED=0`，由板级自由计数初始化随机源。最终生产镜像为 7080 B，SHA256 `c81c4d1df53d7da12d9015cd5b42b55aa90776740246e8cf61027a2afac4928e`；`game-live-test` 通过 CPU 启动、初始双 tile、Left 后 3 tiles/`moves=1`/`score=0` 检查。固定 seed123 的 `game-soc-test` 完整回放通过，每次 20 个状态字段匹配 host，四方向、长按、KEY0 关闭/新开与旧事件清理通过，后台缓冲/VSYNC 监控通过，VGA 480000 像素差异为 0。字模修正后首局 VGA 重验通过，实帧目视确认标题“2048”和棋盘正常。远程实验平台上传 `game.bin`，固件入口和复位地址为 BaseRAM 物理 `0x1C000000`；剩余验收为远程实机加载和运行，详见 [软件说明](sw/README.md) 与 [Vivado/远程平台装载说明](vivado/README.md)。AI 为选做。
+完整固件目标 `make -C sw firmware` 生成生产 `game.bin` 及 ELF/HEX/map/反汇编/符号信息；默认 `GAME_SEED=0`，由板级自由计数初始化随机源。上一版完整回放归档 `outputs/game2048-20261114-v1/` 的生产镜像为 7080 B，SHA256 `c81c4d1df53d7da12d9015cd5b42b55aa90776740246e8cf61027a2afac4928e`；`game-live-test` 通过 CPU 启动、初始双 tile、Left 后 3 tiles/`moves=1`/`score=0` 检查。固定 seed123 的 `game-soc-test` 完整回放通过，每次 20 个状态字段匹配 host，四方向、长按、KEY0 关闭/新开与旧事件清理通过，后台缓冲/VSYNC 监控通过，VGA 480000 像素差异为 0。字模修正后首局 VGA 重验通过，实帧目视确认标题“2048”和棋盘正常。远程实验平台上传 `game.bin`，固件入口和复位地址为 BaseRAM 物理 `0x1C000000`；剩余验收为远程实机加载和运行，详见 [软件说明](sw/README.md) 与 [Vivado/远程平台装载说明](vivado/README.md)。AI 为选做。
 
 ## 目录总览
 

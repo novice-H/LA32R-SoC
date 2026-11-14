@@ -55,16 +55,16 @@ task automatic run_input_scenarios;
             expected_mask = 0;
             case (phase)
                 1: begin touch_btn = 4'h1; expected_mask = 1; expected_reads = 11; end
-                2: begin touch_btn = 4'h2; expected_mask = 2; expected_reads = 3; end
-                3: begin touch_btn = 4'h4; expected_mask = 4; expected_reads = 3; end
+                2: begin touch_btn = 4'h4; expected_mask = 4; expected_reads = 3; end
+                3: begin touch_btn = 4'h2; expected_mask = 2; expected_reads = 3; end
                 4: begin touch_btn = 4'h8; expected_mask = 8; expected_reads = 3; end
                 5: begin touch_btn = 4'hf; expected_mask = 15; expected_reads = 4; end
                 6: begin
                     touch_btn = 1; repeat (8) @(negedge clk);
                     touch_btn = 0; repeat (8) @(negedge clk);
-                    touch_btn = 4; repeat (8) @(negedge clk);
+                    touch_btn = 2; repeat (8) @(negedge clk);
                     touch_btn = 0;
-                    expected_mask = 5; expected_reads = 4;
+                    expected_mask = 3; expected_reads = 4;
                 end
                 7: begin
                     touch_btn = 1; repeat (8) @(negedge clk);
