@@ -112,6 +112,82 @@ inline bool is_win(const uint8_t b[16]) {
     return false;
 }
 
+// ---- 机会节点候选打分的 O(1) 增量实现 ----
+// 插入一个格子只会影响：新格子自身的 smoothness 贡献、左边/上边最近非空格
+// 的“下一个非空”目标，以及新格子与四邻的 islands 计数。
+
+inline int next_right(const uint8_t b[16], int i) {
+    int y = i >> 2, x = i & 3;
+    for (int k = x + 1; k < 4; k++)
+        if (b[y * 4 + k]) return y * 4 + k;
+    return -1;
+}
+
+inline int next_down(const uint8_t b[16], int i) {
+    int y = i >> 2, x = i & 3;
+    for (int k = y + 1; k < 4; k++)
+        if (b[k * 4 + x]) return k * 4 + x;
+    return -1;
+}
+
+inline int prev_left(const uint8_t b[16], int i) {
+    int y = i >> 2, x = i & 3;
+    for (int k = x - 1; k >= 0; k--)
+        if (b[y * 4 + k]) return y * 4 + k;
+    return -1;
+}
+
+inline int prev_up(const uint8_t b[16], int i) {
+    int y = i >> 2, x = i & 3;
+    for (int k = y - 1; k >= 0; k--)
+        if (b[k * 4 + x]) return k * 4 + x;
+    return -1;
+}
+
+inline bool is_island_at(const uint8_t b[16], int i) {
+    int v = b[i];
+    int x = i & 3, y = i >> 2;
+    if (x > 0 && b[i - 1] == v) return false;
+    if (x < 3 && b[i + 1] == v) return false;
+    if (y > 0 && b[i - 4] == v) return false;
+    if (y < 3 && b[i + 4] == v) return false;
+    return true;
+}
+
+inline int smooth_delta(const uint8_t b[16], int c, int v) {
+    int r = next_right(b, c), d = next_down(b, c);
+    int l = prev_left(b, c),  u = prev_up(b, c);
+    int old_s = 0, new_s = 0;
+    if (r >= 0) new_s += iabs(v - b[r]);
+    if (d >= 0) new_s += iabs(v - b[d]);
+    if (l >= 0) {
+        if (r >= 0) old_s += iabs(b[l] - b[r]);
+        new_s += iabs(b[l] - v);
+    }
+    if (u >= 0) {
+        if (d >= 0) old_s += iabs(b[u] - b[d]);
+        new_s += iabs(b[u] - v);
+    }
+    return -(new_s - old_s);
+}
+
+inline int islands_delta(const uint8_t b[16], int c, int v) {
+    int delta = 0;
+    int x = c & 3, y = c >> 2;
+    bool conn = false;
+    if (x > 0 && b[c - 1] == v) conn = true;
+    if (x < 3 && b[c + 1] == v) conn = true;
+    if (y > 0 && b[c - 4] == v) conn = true;
+    if (y < 3 && b[c + 4] == v) conn = true;
+    if (!conn) delta += 1;
+
+    if (x > 0 && b[c - 1] == v && is_island_at(b, c - 1)) delta -= 1;
+    if (x < 3 && b[c + 1] == v && is_island_at(b, c + 1)) delta -= 1;
+    if (y > 0 && b[c - 4] == v && is_island_at(b, c - 4)) delta -= 1;
+    if (y < 3 && b[c + 4] == v && is_island_at(b, c + 4)) delta -= 1;
+    return delta;
+}
+
 struct Ctx {
     uint64_t nodes;
     uint64_t budget;
@@ -132,16 +208,16 @@ int search_chance(const uint8_t b[16], int depth, int alpha, Ctx& c) {
 
     // 机会节点候选剪枝：先按 -smoothness + islands 给每个 (空格, 2/4) 打分，
     // 只递归得分最高的候选（与 ovolve 一致）。
+    // 基准分只算一次；每个候选的增量是 O(1)。
+    int base_metric = -smoothness(b) + islands(b);
     int best_metric = -INF;
     uint8_t cand_cell[32];
     uint8_t cand_val[32];
     int cn = 0;
     for (int k = 0; k < n; k++) {
         for (int v = 1; v <= 2; v++) {
-            uint8_t nb[16];
-            for (int i = 0; i < 16; i++) nb[i] = b[i];
-            nb[cells[k]] = (uint8_t)v;
-            int metric = -smoothness(nb) + islands(nb);
+            int metric = base_metric - smooth_delta(b, cells[k], v)
+                         + islands_delta(b, cells[k], v);
             if (metric > best_metric) { best_metric = metric; cn = 0; }
             if (metric == best_metric) {
                 cand_cell[cn] = (uint8_t)cells[k];
@@ -289,6 +365,18 @@ int best_move(const uint8_t b[16], int node_budget, int max_depth,
     }
     if (nodes_used) *nodes_used = c.nodes;
     return best;
+}
+
+int chance_metric_naive(const uint8_t b[16], int cell, int value) {
+    uint8_t nb[16];
+    for (int i = 0; i < 16; i++) nb[i] = b[i];
+    nb[cell] = (uint8_t)value;
+    return -smoothness(nb) + islands(nb);
+}
+
+int chance_metric_inc(const uint8_t b[16], int cell, int value) {
+    int base = -smoothness(b) + islands(b);
+    return base - smooth_delta(b, cell, value) + islands_delta(b, cell, value);
 }
 
 }  // namespace ai

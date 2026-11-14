@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <chrono>
 
 #include "../app/ai.h"
@@ -61,7 +62,39 @@ GameResult play_game(uint32_t seed, int budget, int max_depth) {
 
 }  // namespace
 
+// 校验 O(1) 增量候选打分与朴素整盘重算完全一致
+static int check_metrics(int trials) {
+    uint32_t s = 12345;
+    int bad = 0;
+    for (int t = 0; t < trials; t++) {
+        uint8_t b[16];
+        for (int i = 0; i < 16; i++) {
+            uint32_t r = ai::rng_next(&s);
+            b[i] = (r % 5 == 0) ? 0 : (uint8_t)(1 + r % 11);
+        }
+        for (int c = 0; c < 16; c++) {
+            if (b[c]) continue;
+            for (int v = 1; v <= 2; v++) {
+                int a = ai::chance_metric_naive(b, c, v);
+                int e = ai::chance_metric_inc(b, c, v);
+                if (a != e) {
+                    if (bad < 5)
+                        std::printf("MISMATCH board=%d cell=%d val=%d naive=%d inc=%d\n",
+                                    t, c, v, a, e);
+                    bad++;
+                }
+            }
+        }
+    }
+    return bad;
+}
+
 int main(int argc, char** argv) {
+    if (argc > 1 && std::strcmp(argv[1], "--metrics") == 0) {
+        int bad = check_metrics(argc > 2 ? std::atoi(argv[2]) : 1000);
+        std::printf("metric check: %s\n", bad == 0 ? "PASS" : "FAIL");
+        return bad == 0 ? 0 : 1;
+    }
     int games = argc > 1 ? std::atoi(argv[1]) : 10;
     int budget = argc > 2 ? std::atoi(argv[2]) : 10000;
     int max_depth = argc > 3 ? std::atoi(argv[3]) : 8;

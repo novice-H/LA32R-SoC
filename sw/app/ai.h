@@ -24,6 +24,12 @@ int eval(const uint8_t b[16]);
 int best_move(const uint8_t b[16], int node_budget, int max_depth,
               uint64_t* nodes_used = nullptr);
 
+// 测试用：机会节点候选打分的朴素实现（每次重算整盘）。
+// 搜索内部使用等价的 O(1) 增量实现，二者结果必须一致。
+int chance_metric_naive(const uint8_t b[16], int cell, int value);
+// 测试用：同一打分的 O(1) 增量实现（搜索内部用预计算基准的版本）
+int chance_metric_inc(const uint8_t b[16], int cell, int value);
+
 // xorshift32
 uint32_t rng_next(uint32_t* s);
 // 在随机空格生成 2（90%）或 4（10%）
