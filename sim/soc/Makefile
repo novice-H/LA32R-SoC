@@ -124,7 +124,7 @@ run-v2: sim-v2
 	@grep -q "RESULT: PASS" $(BUILD)/log_v2.txt && echo "SOC_SIM_V2: PASS" || (echo "SOC_SIM_V2: FAIL"; exit 1)
 
 # ---------------------------------------------------------------- AI 单步基准
-AI_OBJS := $(BUILD)/ai_crt0.o $(BUILD)/ai_core.o $(BUILD)/ai_bench.o $(BUILD)/ai_mem.o
+AI_OBJS := $(BUILD)/ai_crt0.o $(BUILD)/ai_core.o $(BUILD)/ai_bench.o $(BUILD)/ai_mem.o $(BUILD)/ai_cache.o
 AI_CXXFLAGS := -std=c++11 -O2 -march=loongarch32r -mabi=ilp32s -ffreestanding \
                -fno-exceptions -fno-rtti -fno-builtin -fno-pic -fno-pie \
                -fno-stack-protector -fno-unwind-tables -fno-asynchronous-unwind-tables \
@@ -142,6 +142,9 @@ $(BUILD)/ai_bench.o: $(ROOT)/sw/tests/ai_bench_la32r.cpp $(ROOT)/sw/app/ai.h
 
 $(BUILD)/ai_mem.o: $(ROOT)/sw/libc/memory.cpp
 	$(CROSS)g++ $(AI_CXXFLAGS) -c $< -o $@
+
+$(BUILD)/ai_cache.o: $(ROOT)/sw/boot/cache_enable.S
+	$(CROSS)gcc -march=loongarch32r -mabi=ilp32s -fno-pic -fno-pie -c $< -o $@
 
 $(BUILD)/ai.elf: $(AI_OBJS) $(ROOT)/sw/boot/link.ld
 	$(CROSS)g++ -march=loongarch32r -mabi=ilp32s -static -no-pie -nostdlib -nostartfiles \

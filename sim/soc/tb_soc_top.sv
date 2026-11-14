@@ -172,8 +172,8 @@ module tb_soc_top;
         end
         cyc1 = cyc;
 
-        ai_nodes = u_base_ram.mem[20'hFC000];
-        ai_move  = u_base_ram.mem[20'hFC001];
+        ai_nodes = u_ext_ram.mem[20'hFC000];
+        ai_move  = u_ext_ram.mem[20'hFC001];
 
         $display("AI one-move: cycles=%0d nodes=%0d cycles/node=%0.1f move=%0d",
                  cyc1 - cyc0, ai_nodes,
