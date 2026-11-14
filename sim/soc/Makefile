@@ -44,7 +44,18 @@ $(BUILD)/start.bin: $(BUILD)/start.elf
 $(BUILD)/prog.hex: $(BUILD)/start.bin bin2hex.py
 	$(PYTHON) bin2hex.py $< $@
 
+$(BUILD)/start_v2.elf: prog/start_v2.S prog/link.ld
+	mkdir -p $(BUILD)
+	$(CROSS)gcc -nostdlib -nostartfiles -T prog/link.ld prog/start_v2.S -o $@
+
+$(BUILD)/start_v2.bin: $(BUILD)/start_v2.elf
+	$(CROSS)objcopy -O binary $< $@
+
+$(BUILD)/prog_v2.hex: $(BUILD)/start_v2.bin bin2hex.py
+	$(PYTHON) bin2hex.py $< $@
+
 prog: $(BUILD)/prog.hex
+prog2: $(BUILD)/prog_v2.hex
 
 # ---------------------------------------------------------------- 仿真
 lint: prog
@@ -60,6 +71,15 @@ run: sim
 	cd $(BUILD) && ./obj/Vtb | tee log.txt
 	@grep -q "RESULT: PASS" $(BUILD)/log.txt && echo "SOC_SIM: PASS" || (echo "SOC_SIM: FAIL"; exit 1)
 
+sim-v2: prog2
+	mkdir -p $(BUILD)/obj_v2
+	$(VERILATOR) $(VFLAGS) -DTB_V2 $(HERE)/tb_soc_top.sv $(RTL) \
+	    --Mdir $(BUILD)/obj_v2 -o VtbV2
+
+run-v2: sim-v2
+	cd $(BUILD) && ./obj_v2/VtbV2 | tee log_v2.txt
+	@grep -q "RESULT: PASS" $(BUILD)/log_v2.txt && echo "SOC_SIM_V2: PASS" || (echo "SOC_SIM_V2: FAIL"; exit 1)
+
 wave: prog
 	mkdir -p $(BUILD)/obj_wave
 	$(VERILATOR) $(VFLAGS) --trace $(HERE)/tb_soc_top.sv $(RTL) \
@@ -70,4 +90,4 @@ wave: prog
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all prog lint sim run wave clean
+.PHONY: all prog prog2 lint sim run sim-v2 run-v2 wave clean

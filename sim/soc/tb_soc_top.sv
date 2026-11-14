@@ -63,8 +63,14 @@ module tb_soc_top;
     // 仿真观测：CPU 写回级 PC（thinpad_top 不引出，只能层次引用）
     assign dbg_wb_pc = dut.u_soc.dbg_wb_pc;
 
+`ifdef TB_V2
+    localparam BASE_INIT = "prog_v2.hex";
+`else
+    localparam BASE_INIT = "prog.hex";
+`endif
+
     async_sram_model #(
-        .WORDS(1 << 20), .LOAD_INIT(1'b1), .INIT_FILE("prog.hex"), .FILL_WORD(32'd0)
+        .WORDS(1 << 20), .LOAD_INIT(1'b1), .INIT_FILE(BASE_INIT), .FILL_WORD(32'd0)
     ) u_base_ram (
         .clk(clk), .addr(base_ram_addr), .be_n(base_ram_be_n),
         .ce_n(base_ram_ce_n), .oe_n(base_ram_oe_n), .we_n(base_ram_we_n),
@@ -132,6 +138,12 @@ module tb_soc_top;
         // 采一整帧
         while (video_vsync === 1'b1) @(posedge clk);
         while (video_vsync === 1'b0) @(posedge clk);
+`ifdef TB_V2
+        // VGA 在上一帧末尾预取下一帧的 word0；程序若在此之后改写，
+        // 第一帧左上 4 像素会滞后一帧。多等一帧再采样即可。
+        while (video_vsync === 1'b1) @(posedge clk);
+        while (video_vsync === 1'b0) @(posedge clk);
+`endif
 
         n = 0;
         timeout = 0;
@@ -149,11 +161,23 @@ module tb_soc_top;
             errors = errors + 1;
         end else begin
             $display("PASS: 采到完整一帧");
+`ifdef TB_V2
+            check32({24'd0, frame[0]},          32'h0000FF, "pixel(0,0)    左上角白");
+            check32({24'd0, frame[800]},        32'h0000FF, "pixel(0,1)    左边白");
+            check32({24'd0, frame[400]},        32'h0000EF, "pixel(400,0)  顶边中粉");
+            check32({24'd0, frame[599*800]},    32'h0000FF, "pixel(0,599)  底边白");
+            check32({24'd0, frame[599*800+796]},32'h0000FF, "pixel(796,599)右边白");
+            check32({24'd0, frame[300*800]},    32'h0000FF, "pixel(0,300)  左边白");
+            check32({24'd0, frame[300*800+4]},  32'h000003, "pixel(4,300)  背景蓝");
+            check32({24'd0, frame[796]},        32'h0000FF, "pixel(796,0)  右边白");
+            check32({24'd0, frame[4]},          32'h0000EF, "pixel(4,0)    顶边粉");
+`else
             check32({24'd0, frame[0]},   32'h0000EF, "pixel(0,0)  FB0 line0");
             check32({24'd0, frame[3]},   32'h0000EF, "pixel(3,0)  FB0 line0");
             check32({24'd0, frame[800]}, 32'h0000E0, "pixel(0,1)  FB0 line1 word0");
             check32({24'd0, frame[803]}, 32'h0000E0, "pixel(3,1)  FB0 line1 word0");
             check32({24'd0, frame[804]}, 32'h000000, "pixel(4,1)  未写区域为 0");
+`endif
         end
 
         if (errors == 0) $display("RESULT: PASS");

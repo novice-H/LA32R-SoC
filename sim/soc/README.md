@@ -8,6 +8,7 @@ make prog   # 只编译启动程序（build/soc/prog.hex）
 make lint   # Verilator -Wall
 make clean
 make wave   # 生成 build/soc/soc.vcd（程序跑完即停，不采整帧）
+make run-v2 # 跑 v2 冒烟程序（整屏填充 + 边框）
 ```
 
 波形用 `gtkwave build/soc/soc.vcd` 打开：可看 CPU 的 AXI 读写握手、总线 2 拍应答、
@@ -72,6 +73,11 @@ sim/soc/tb_soc_top.sv 直接例化 thinpad_top，RAM 模型接 board 引脚
 其余文件不用动。
 
 ## 启动程序
+
+| 版本 | 源文件 | 上板 bin | 内容 |
+| --- | --- | --- | --- |
+| v1 | `prog/start.S` | `build/soc/start.bin` | 顶行粉 + 第 1 行 4 像素红（其余区域是 ExtRAM 上电随机值） |
+| v2 | `prog/start_v2.S` | `build/soc/start_v2.bin` | 整屏填蓝 + 粉色顶边 + 白色底边/左右列（整屏干净） |
 
 `prog/start.S`：链接在 `0x1C00_0000`，无栈、无 TLB：
 
