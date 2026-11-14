@@ -2,18 +2,19 @@
 
 ## 当前范围与文件职责
 
-当前实现手动 2048、PC 规则测试、WSL/Linux 终端试玩，并保留开发板平台接口。AI 为选做。核心参考 plibither8/2048.cpp 的规则代码，使用 C++11、固定数组和整数进行精简实现。
+当前实现手动 2048、PC 规则测试、WSL/Linux 终端试玩、LA32R 板级后端与整机仿真入口。AI 为选做。核心参考 plibither8/2048.cpp 的规则代码，使用 C++11、固定数组和整数进行精简实现。
 
 | 文件 | 职责 | 开发板移植时的处理 |
 | --- | --- | --- |
 | `sw/app/game.h` | 棋盘、方向、状态与规则函数声明 | 共用 |
 | `sw/app/game.cpp` | 初始化、移动合并、随机生成、胜负判断 | 共用 |
 | `sw/app/main.cpp` | 获取事件 → 移动 → 生成方块 → 绘制 | 共用；启动层调用 main |
-| `sw/hal/platform.h` | 输入事件、绘制、随机数接口 | 共用 |
+| `sw/hal/platform.h` | 输入事件、开局等待、绘制、随机数接口 | 共用 |
 | `sw/hal/platform_pc.cpp` | POSIX 终端按键、字符棋盘、伪随机数 | 板级构建选择新的后端 |
+| `sw/hal/platform_la32r.cpp` | confreg 输入、KEY0 生命周期、硬件随机种子 | 已实现并通过整机游戏回放 |
+| `sw/hal/board_render.cpp` | RGB332 棋盘、状态文字及 framebuffer 提交 | 已实现；最终游戏帧待整机比较 |
 | `sw/tests/game_test.cpp` | 固定棋盘、固定随机序列的规则验证 | PC 回归；也可供仿真复用测试输入 |
 | `sw/tests/pc_test.py` | 输入回放和伪终端交互检查 | PC 测试工具 |
-<<<<<<< HEAD
 | [`sw/boot/crt0.S`](../sw/boot/crt0.S) | 设置启动栈、复制 `.data`、清零 `.bss`、调用 `main`；`main` 返回后停在 `_boot_halt` | 已有启动层；当前由 SoC smoke image 验证 |
 | [`sw/boot/link.ld`](../sw/boot/link.ld) | 将镜像链接到 BaseRAM `0x1C00_0000`，定义 data LMA/VMA、BSS、栈顶和边界断言 | 已有 smoke 链接布局；动态 C++ 初始化目前由断言禁用 |
 | [`sw/tests/board_smoke.cpp`](../sw/tests/board_smoke.cpp) | 检查初始化 data、BSS 清零、栈读写、confreg 和 FB0 写入 | 独立自检入口，用于启动与硬件通路验收 |
@@ -26,13 +27,7 @@
 | [`sw/Makefile`](../sw/Makefile) | PC 构建/测试、交叉对象、启动 smoke 固件与 SoC 仿真入口 | `board-smoke-test` 目前验证 smoke image |
 | `sw/third_party/2048.cpp.LICENSE` | 上游版权和 MIT 许可 | 随代码保留 |
 
-板级抽象接口已在 [`sw/hal/platform.h`](../sw/hal/platform.h) 声明：`read_event()`、`render()` 和 `random_u32()`。confreg、输入、帧缓冲/字模/翻页驱动均已实现；`platform_la32r.cpp` 和完整板级游戏固件仍待实现和链接。
-=======
-| `sw/Makefile` | PC 构建、测试和目标对象编译检查 | 后续补充完整固件目标 |
-| `sw/third_party/2048.cpp.LICENSE` | 上游版权和 MIT 许可 | 随代码保留 |
-
-后续按需新增 `sw/boot/crt0.S`、`sw/boot/link.ld`、`sw/hal/platform_la32r.cpp` 和 `sw/drv/` 中的按键、帧缓冲驱动；已有 `sw/libc/` 可放实际需要的最小运行库。板级构建选择 `platform_la32r.cpp`，PC 构建选择 `platform_pc.cpp`。
->>>>>>> 5f57701058e76b1bb6c4717c043f8e71cdb10eee
+平台抽象接口已在 [`sw/hal/platform.h`](../sw/hal/platform.h) 声明：`read_event()`、`render()`、`random_u32()` 和 `wait_for_start()`；事件包含 `Pause`。LA32R 后端、板级棋盘绘制和完整游戏固件均已接入，并通过 seed123 CPU 整机回放与生产镜像 live 测试。
 
 ## 数据与接口
 
@@ -91,7 +86,6 @@ void refresh_status(Game&);                // 更新 over
 
 `make -C sw test` 运行核心用例和 PC 回放/伪终端测试，覆盖四方向、合并顺序、得分步数、胜负、随机生成、确定性、方向键、重开、退出及终端恢复。用同一随机种子与同一输入序列可复现问题。
 
-<<<<<<< HEAD
 ### 已实现并通过 SoC 仿真的启动层
 
 [`sw/boot/crt0.S`](../sw/boot/crt0.S) 将栈指针设为 `0x1C40_0000`，按 32 位字从 data 的加载地址复制到运行地址，清零 BSS，再调用 `main`；`main` 返回后进入 `_boot_halt`。链接脚本 [`sw/boot/link.ld`](../sw/boot/link.ld) 将镜像放入 4 MiB BaseRAM 窗口，data 运行地址按 4 KiB 对齐，BSS 和栈空间有边界断言，并要求 `.init_array` 为空。当前启动层按静态常量初始化的 freestanding 程序使用。
@@ -100,12 +94,12 @@ void refresh_status(Game&);                // 更新 over
 
 记录在 [`outputs/cpp-boot-20261114-v1/cpp-smoke.log`](../outputs/cpp-boot-20261114-v1/cpp-smoke.log) 的完整 SoC 仿真报告 7600 拍后状态、LED、数码管、`_boot_halt` 返回地址、data/BSS/stack 检查以及完整帧像素抽查均通过。对应 [`manifest.json`](../outputs/cpp-boot-20261114-v1/manifest.json) 记录镜像大小 468 字节、BaseRAM 入口 `0x1C00_0000`、栈顶 `0x1C40_0000`、栈保留 16 KiB，并记录无未定义 ELF 符号。该验收覆盖的是 smoke 固件和 RTL 仿真模型。
 
-### 下一阶段实施顺序
+### 当前实现与验收状态
 
-1. **驱动层已通过对应测试**：输入测试 12 场景/49 项检查；显示测试两幅画面 960000 像素一致，正常翻页/超时恢复合计 4 次 VSYNC 切换。下一项为平台适配。
-2. **实现平台适配**：新增 `sw/hal/platform_la32r.cpp` 实现 `platform.h` 的三个函数，把板载按键事件映射到 `Event`，由 `render()` 绘制棋盘、更新步数/状态并提交翻页请求，以硬件计数器初始化软件伪随机状态，回归时使用固定种子。保留 `platform_pc.cpp` 供主机试玩。
-3. **链接完整游戏 ELF**：将 `sw/app/main.cpp`、`sw/app/game.cpp`、板级平台和驱动与启动层链接，检查 ELF 入口、data load/run 地址、BSS、栈区和无未解析符号；用最终游戏镜像替换 smoke image，再运行 SoC 回归。当前 `main()` 收到 `Quit` 后返回并进入启动层停机循环，板级版本应配合事件及主循环实现游戏开关关闭后等待、再次开启重开。任务细分和验收见 [软件下一阶段计划](../sw/README.md#下一阶段手动游戏板级接入)。
-4. **上板加载与验收**：制定并实测把最终镜像装入 BaseRAM 的加载步骤，先验收上电启动、屏幕测试图、LED/数码管和按键输入，再验收完整棋盘移动、重开、胜负状态与翻页。当前没有记录开发板加载和实物运行结果，完成后再补充具体工具、命令和实测结果。
+1. **平台与主循环**：`platform_la32r.cpp` 将 KEY0 低电平映射到 `Pause`，等待开局时清除旧输入事件、清 LED 状态并清屏；KEY0 开启后按硬件 RAND 初始化 xorshift 状态。KEY1 当前忽略。主循环在外层等待开局、初始化新棋局，内层消费按键；暂停后返回外层等待。AI 为选做。
+2. **固件构建**：在 WSL 仓库根目录执行 `source requirements/env.sh && make -C sw firmware`。`GAME_SEED` 默认 0 表示从硬件计数器取种子；产物在 `${LA32R_BUILD:-$HOME/build/la32r}/sw/game/`，包括 `game.elf`、`game.bin`、`game.hex`、map、反汇编、符号表与 ELF 信息。ELF 链接入口为 BaseRAM 物理地址 `0x1C000000`；`game.bin` 是远程实验平台上传的固件文件。
+3. **整机回放**：最终生产镜像 `game-live-test` 通过 CPU 启动、初始双 tile、Left 后 3 tiles/`moves=1`/`score=0` 检查，`RESULT: PASS`；仿真时间 332 ms，wall time 220.768 s。固定 `GAME_SEED=123` 的完整 `game-soc-test` 返回 `RESULT: PASS` / `SOC_SIM: PASS`：Up/Left/Down/Right 至 serial 5、Up 长按仅产生 serial 6、KEY0 关闭后 inactive=0、standby Right 被清除后重开至 serial 7，KEY=3（KEY0/KEY1 均为 1）时手动 AI=0。每次 20 个 CPU 状态字段快照匹配 host；后台显存写入与 VSYNC 监控通过，完整 VGA 480000 像素 `different_pixels=0`。Golden 回放是普通棋局，`won`、`over` 均为 false；胜利与死局规则由 host `game_test` 覆盖。仿真时长约 1 s，wall time 721.498 s。数字字模修正后，`GAME_RUN_ARGS=+game-image-test` 首局画面测试返回 `RESULT: PASS` / `SOC_SIM: PASS`，仿真 172 ms、wall time 111.236 s、480000 像素差异为 0，目视确认标题“2048”和棋盘正常。`glyph-diff.json` 记录新旧 seed123 固件仅 30 B 标题 5×7 数字表不同，其余 bytes 完全相同。最终生产 `game.bin` 为 7080 B，SHA256 `c81c4d1df53d7da12d9015cd5b42b55aa90776740246e8cf61027a2afac4928e`；完整文件/哈希及各测试关系见交付 manifest。
+4. **远程实验平台与实机验收**：先将 bitstream 下载到 FPGA，再由远程实验平台的 SRAM 装载入口上传生产固件 `game.bin`，配置 BaseRAM 物理地址 `0x1C000000`/复位入口并按平台流程管理 CPU 复位。平台 UI 的加载字段和 SRAM 偏移填写方式需对照实际界面确认；地址 `0x1C000000` 对应 BaseRAM 偏移 0。无需本机 JTAG。当前没有本轮远程上板记录，需实测 VGA 棋盘、四方向按键、KEY0 暂停/清屏/新局和连续运行后再登记结果。UART 和 Flash 当前均未接入固件下载路径。
 
 AI 为选做功能，安排在基本输入、渲染和完整游戏镜像通过 SoC 与板上验收之后；AI 搜索策略、运行时间和棋盘结果需单独建立用例及资源测量。
 
@@ -122,8 +116,3 @@ AI 为选做功能，安排在基本输入、渲染和完整游戏镜像通过 S
 `Surface` 固定对应 800×600 RGB332 字缓冲。图元在裁剪后按整字写入，非四像素对齐的首尾采用字内掩码读改写，数字按透明 8×16 字模放大绘制。`Frame` 在 `begin` 成功后取得后台页；`present` 检查页号/指针/请求状态，执行 DBAR 0 后申请翻页，并等待请求清除和目标页显示。单线程提交、当前 uncached 配置下使用；超时后重新 `begin` 等待硬件完成并取下一后台。
 
 主机测试使用独立像素和字形参考，检查裁剪、字节 lane、全屏填充、0～9、十进制 0/2048/uint32 最大值和放大倍数；并通过 ASan/UBSan。CPU 测试实际绘制两幅图，以显示 RGB 端口采集的结果和 golden 逐像素比较，监控前后台写地址、字使能、VSYNC 切换、边界哨兵，验证零等待期限超时及恢复。原始结果与实际画面见本地 [framebuffer-20261114-v1](../outputs/framebuffer-20261114-v1/README.md)。
-=======
-后续板级后端将板载按键映射到 `Event`，将拨码控制转换为开始/重开等事件，`render` 负责绘制后台帧缓冲并完成翻页握手。步数和状态输出也由板级 `render` 更新。按键事件位序、启动入口、CPU 地址转换及 cache 属性、显存映射和翻页约定需与实际 RTL 一同验收。
-
-交叉检查只生成核心和主循环对象。完整固件还需设置栈、初始化数据段、链接所需运行库并加载到目标存储器。建议先通过最小 LED 程序，再检查输入、测试图和棋盘，最后进行 PC/SoC 固定输入回放对比。
->>>>>>> 5f57701058e76b1bb6c4717c043f8e71cdb10eee

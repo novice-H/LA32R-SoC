@@ -32,24 +32,36 @@ void write_pixel_run(volatile std::uint32_t* words, int y, int x0, int x1,
                      std::uint32_t value) {
     const std::uint32_t row_start =
         static_cast<std::uint32_t>(y) * (kWidth / 4);
-    const int first_word = x0 / 4;
-    const int last_word = (x1 - 1) / 4;
+    int x = x0;
 
-    for (int word_index = first_word; word_index <= last_word; ++word_index) {
-        const int first_lane = word_index == first_word ? x0 & 3 : 0;
-        const int last_lane = word_index == last_word ? ((x1 - 1) & 3) : 3;
+    if ((x & 3) != 0) {
+        const int first_lane = x & 3;
+        int lane_count = 4 - first_lane;
+        if (lane_count > x1 - x) lane_count = x1 - x;
         std::uint32_t mask = 0;
-        for (int lane = first_lane; lane <= last_lane; ++lane) {
+        for (int lane = first_lane; lane < first_lane + lane_count; ++lane) {
             mask |= 0xffu << (lane * 8);
         }
+        volatile std::uint32_t& target = words[row_start + x / 4];
+        const std::uint32_t old_value = target;
+        target = (old_value & ~mask) | (value & mask);
+        x += lane_count;
+    }
 
-        volatile std::uint32_t& target = words[row_start + word_index];
-        if (mask == 0xffffffffu) {
-            target = value;
-        } else {
-            const std::uint32_t old_value = target;
-            target = (old_value & ~mask) | (value & mask);
+    while (x + 4 <= x1) {
+        words[row_start + x / 4] = value;
+        x += 4;
+    }
+
+    if (x < x1) {
+        const int lane_count = x1 - x;
+        std::uint32_t mask = 0;
+        for (int lane = 0; lane < lane_count; ++lane) {
+            mask |= 0xffu << (lane * 8);
         }
+        volatile std::uint32_t& target = words[row_start + x / 4];
+        const std::uint32_t old_value = target;
+        target = (old_value & ~mask) | (value & mask);
     }
 }
 

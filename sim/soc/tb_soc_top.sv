@@ -95,6 +95,7 @@ module tb_soc_top;
 
     `include "input_scenarios.svh"
     `include "framebuffer_scenarios.svh"
+    `include "game_scenarios.svh"
 
     integer timeout, n;
     reg cpp_smoke;
@@ -123,7 +124,22 @@ module tb_soc_top;
         repeat (20) @(posedge clk);
         reset_btn = 0;
 
-        if ($test$plusargs("input-test")) begin
+        if ($test$plusargs("game-image-test")) begin
+            run_game_image_scenarios();
+            if (errors == 0) $display("RESULT: PASS (CPU game image test)");
+            else             $display("RESULT: FAIL (%0d errors)", errors);
+            $finish;
+        end else if ($test$plusargs("game-live-test")) begin
+            run_game_live_scenarios();
+            if (errors == 0) $display("RESULT: PASS (CPU live game test)");
+            else             $display("RESULT: FAIL (%0d errors)", errors);
+            $finish;
+        end else if ($test$plusargs("game-test")) begin
+            run_game_scenarios();
+            if (errors == 0) $display("RESULT: PASS (CPU game test)");
+            else             $display("RESULT: FAIL (%0d errors)", errors);
+            $finish;
+        end else if ($test$plusargs("input-test")) begin
             run_input_scenarios();
             if (errors == 0) $display("RESULT: PASS (CPU input test)");
             else             $display("RESULT: FAIL (%0d errors)", errors);

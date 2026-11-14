@@ -4,7 +4,6 @@ BUILD ?= $(if $(LA32R_BUILD),$(LA32R_BUILD)/sw,$(HOME)/build/la32r/sw)
 CXXFLAGS ?= -std=c++11 -O2 -Wall -Wextra -Werror -pedantic
 CORE := app/game.cpp
 HEADERS := app/game.h hal/platform.h
-<<<<<<< HEAD
 LA32R_BUILD_DIR := $(BUILD)/la32r
 LA32R_FLAGS := $(CXXFLAGS) -march=loongarch32r -mabi=ilp32s -ffreestanding -fno-exceptions -fno-rtti -fno-pic -fno-pie -fno-stack-protector
 SMOKE_DIR := $(BUILD)/board-smoke
@@ -13,10 +12,6 @@ INPUT_DIR := $(BUILD)/input-soc
 FRAMEBUFFER_DIR := $(BUILD)/framebuffer-soc
 
 .PHONY: all play test cross-check cross-artifacts board-smoke board-smoke-test board-smoke-wave input-soc input-soc-test framebuffer-test framebuffer-soc framebuffer-soc-test
-=======
-
-.PHONY: all play test cross-check
->>>>>>> 5f57701058e76b1bb6c4717c043f8e71cdb10eee
 all: $(BUILD)/2048
 
 $(BUILD):
@@ -39,7 +34,6 @@ test: $(BUILD)/game_test $(BUILD)/2048
 cross-check: | $(BUILD)
 	$(CROSS)g++ $(CXXFLAGS) -ffreestanding -fno-exceptions -fno-rtti -c $(CORE) -o "$(BUILD)/game.la32r.o"
 	$(CROSS)g++ $(CXXFLAGS) -ffreestanding -fno-exceptions -fno-rtti -c app/main.cpp -o "$(BUILD)/main.la32r.o"
-<<<<<<< HEAD
 
 # Current game sources compiled for mycpu; complete firmware requires a board backend.
 cross-artifacts: | $(BUILD)
@@ -159,5 +153,53 @@ framebuffer-soc-test: framebuffer-test framebuffer-soc
 	    FRAMEBUFFER_SYMBOLS="$(abspath $(FRAMEBUFFER_DIR)/framebuffer.nm)" \
 	    FRAMEBUFFER_GOLDEN="$(abspath $(FRAMEBUFFER_DIR))" RUN_ARGS=+framebuffer-test run
 	python3 tests/framebuffer_compare.py "$(FRAMEBUFFER_DIR)" "$(FRAMEBUFFER_DIR)/soc" "$(FRAMEBUFFER_DIR)"
-=======
->>>>>>> 5f57701058e76b1bb6c4717c043f8e71cdb10eee
+
+# Use separate directories for production (hardware seed) and deterministic replay.
+GAME_DIR ?= $(BUILD)/game
+GAME_SEED ?= 0
+GAME_RUN_ARGS ?= +game-test
+GAME_SOURCES := app/game.cpp app/main.cpp hal/platform_la32r.cpp hal/board_render.cpp drv/input.cpp drv/framebuffer.cpp
+GAME_HEADERS := $(HEADERS) hal/board_render.h drv/input.h drv/framebuffer.h drv/font_digits.h drv/confreg.h
+.PHONY: firmware game-soc-test game-live-test game-config
+game-config:
+	@mkdir -p "$(GAME_DIR)"
+	@printf '%s\n' '$(GAME_SEED)' > "$(GAME_DIR)/seed.tmp"
+	@cmp -s "$(GAME_DIR)/seed.tmp" "$(GAME_DIR)/seed.config" || cp "$(GAME_DIR)/seed.tmp" "$(GAME_DIR)/seed.config"
+
+$(GAME_DIR)/seed.config: game-config
+	@:
+
+$(GAME_DIR)/game.elf: $(GAME_SOURCES) $(GAME_HEADERS) boot/crt0.S boot/link.ld Makefile $(GAME_DIR)/seed.config
+	$(CROSS)g++ $(SMOKE_FLAGS) -DGAME2048_SEED=$(GAME_SEED) -static -no-pie -nostdlib -nostartfiles \
+	    -Wl,--build-id=none,-Map,$(GAME_DIR)/game.map -T boot/link.ld \
+	    boot/crt0.S $(GAME_SOURCES) -lgcc -o "$@"
+	test -z "$$($(CROSS)nm -u "$@")"
+
+$(GAME_DIR)/game.bin: $(GAME_DIR)/game.elf
+	$(CROSS)objcopy -O binary $< "$@"
+
+$(GAME_DIR)/game.hex: $(GAME_DIR)/game.bin ../sim/soc/bin2hex.py
+	python3 ../sim/soc/bin2hex.py $< "$@"
+
+firmware: $(GAME_DIR)/game.hex
+	$(CROSS)objdump -d -C "$(GAME_DIR)/game.elf" > "$(GAME_DIR)/game.dis"
+	$(CROSS)readelf -h -l -S "$(GAME_DIR)/game.elf" > "$(GAME_DIR)/game.elf-info.txt"
+	$(CROSS)nm -n "$(GAME_DIR)/game.elf" > "$(GAME_DIR)/game.nm"
+
+$(BUILD)/game_replay: tests/game_replay.cpp $(CORE) hal/board_render.cpp hal/board_render.h drv/framebuffer.cpp $(GAME_HEADERS) | $(BUILD)
+	$(CXX) $(CXXFLAGS) tests/game_replay.cpp $(CORE) hal/board_render.cpp drv/framebuffer.cpp -o "$@"
+
+game-soc-test: $(BUILD)/game_replay
+	$(MAKE) firmware GAME_DIR="$(abspath $(BUILD)/game-test)" GAME_SEED=123
+	"$(BUILD)/game_replay" "$(abspath $(BUILD)/game-test)"
+	$(MAKE) -C ../sim/soc BUILD="$(abspath $(BUILD)/game-test/soc)" CROSS="$(CROSS)" \
+	    PROGRAM_HEX="$(abspath $(BUILD)/game-test/game.hex)" \
+	    GAME_SYMBOLS="$(abspath $(BUILD)/game-test/game.nm)" \
+	    GAME_GOLDEN="$(abspath $(BUILD)/game-test)" RUN_ARGS="$(GAME_RUN_ARGS)" run
+	python3 tests/game_compare.py "$(BUILD)/game-test"
+
+# Exercise the exact upload image, with its hardware-counter seed path.
+game-live-test: firmware
+	$(MAKE) -C ../sim/soc BUILD="$(abspath $(BUILD)/game-live/soc)" CROSS="$(CROSS)" \
+	    PROGRAM_HEX="$(abspath $(GAME_DIR)/game.hex)" \
+	    GAME_SYMBOLS="$(abspath $(GAME_DIR)/game.nm)" RUN_ARGS=+game-live-test run
