@@ -2,19 +2,27 @@
 
 CPU + AXI 桥 + 总线译码 + 两片 SRAM + confreg + VGA 的整机仿真。
 
+当前硬件资源及接口见 [soc/README.md](../../soc/README.md)。板级 `thinpad_top` 已封装 `soc_top`，整机使用 `soc/bus/axi_slave_ref.v` 中的 `axi_slave_wrap`。
+
+在仓库根目录执行（bash，产物放 WSL ext4）：
+
 ```bash
-make        # 编译启动程序 + 编译 Verilator 模型 + 运行
-make prog   # 只编译启动程序（build/soc/prog.hex）
-make lint   # Verilator -Wall
-make clean
-make wave   # 生成 build/soc/soc.vcd（程序跑完即停，不采整帧）
-make run-v2 # 跑 v2 冒烟程序（整屏填充 + 边框）
+source requirements/env.sh
+soc_build="${LA32R_BUILD:-$HOME/build/la32r}/soc"
+make -C sim/soc BUILD="$soc_build" CROSS="${CROSS}"        # 完整测试
+make -C sim/soc BUILD="$soc_build" CROSS="${CROSS}" prog   # 只生成 prog.hex
+make -C sim/soc BUILD="$soc_build" CROSS="${CROSS}" lint   # 独立 lint
+make -C sim/soc BUILD="$soc_build" CROSS="${CROSS}" wave   # 短运行波形
+make -C sim/soc run-v2      # v2 整屏冒烟（全部 120000 字都写）
+make -C sim/soc run-ai      # AI 单步基准（测周期数）
 ```
 
-波形用 `gtkwave build/soc/soc.vcd` 打开：可看 CPU 的 AXI 读写握手、总线 2 拍应答、
+Makefile 的 `BUILD` 默认仍指向仓库 `build/soc`，上面显式覆盖。`CROSS` 显式使用 env.sh 选中的工具链，避开 Makefile 中旧版工具链路径优先选择。
+
+波形用 `gtkwave "$soc_build/soc.vcd"` 打开：可看 CPU 的 AXI 读写握手、总线 2 拍应答、
 两片 SRAM 的 CE/OE/WE、VGA 的 de/hsync/vsync 与 RGB。
 
-一次运行约 20 秒编译 + 1 秒仿真，最终打印 `RESULT: PASS`。
+运行耗时取决于主机；成功判定同时查看 `RESULT: PASS` 与 `SOC_SIM: PASS`。`wave` 使用 `+short` 提前结束，验收整帧需运行默认完整目标。
 
 ## 结构
 
@@ -22,7 +30,7 @@ make run-v2 # 跑 v2 冒烟程序（整屏填充 + 边框）
 core_top (openLA500, AXI3)
     │
     ▼
-soc/bus/axi_slave_wrap.v   ← 参考桥（队友正式桥到位后替换这个文件）
+soc/bus/axi_slave_ref.v    ← 当前参考桥，模块名 axi_slave_wrap
     │  单拍 req/rsp
     ▼
 soc/bus/soc_bus.v          ← 地址译码 + 固定 2 拍应答
@@ -50,8 +58,7 @@ sim/soc/tb_soc_top.sv 直接例化 thinpad_top，RAM 模型接 board 引脚
 | ExtRAM 别名 | `0xA000_0000`–`0xA03F_FFFF` | 同上 |
 | confreg | `0xBFD0_0000`–`0xBFD0_00FF` | |
 
-> **注意**：openLA500 的复位 PC 固定在 `0x1C00_0000`，所以代码必须链接到这里；
-> `0x8000_0000`/`0xA000_0000` 只是别名，方便沿用原设计文档。
+当前自检程序链接到 CPU 复位入口 `0x1C00_0000`。兼容别名命中同一 SRAM；若改变入口需同时安排复位取指或跳转。cache 属性由 CPU CSR/DMW/TLB 等控制，软件应明确配置 MMIO 和帧缓冲的存储属性。
 
 ## AXI 桥接口契约（队友的正式桥按这个接）
 
@@ -64,20 +71,76 @@ sim/soc/tb_soc_top.sv 直接例化 thinpad_top，RAM 模型接 board 引脚
 
 约定：
 
-1. 总线**固定 2 拍应答**（`soc_bus` 已实现），桥不要自己做等待状态；
+1. 简单总线在请求被接受后固定 2 拍应答，AXI 桥仍负责请求握手、等待响应及 AXI 协议状态；
 2. `m_addr` 是字节地址，`soc_bus` 负责译码与字地址转换；
 3. 当前 CPU 只发 32 位访问（`arsize=2`），参考桥未处理窄传输；
 4. 读数据按拍返回、`rlast` 标最后一拍；写响应在最后一个 W 拍之后给一次 B。
 
-替换方式：把正式桥写成 **同名模块 `axi_slave_wrap`**（或改 `soc/soc_top.v` 的例化），
-其余文件不用动。
+后续若更换该 AXI 从桥，需要保持此接口或同步修改 `soc_top` 与构建源清单，再运行同一整机回归。仓库中的 `soc/sram_axi_bridge.v` 提供类 SRAM → AXI 主口接口，独立测试由 `sim/Makefile` 的 `bridge-test` 执行；该模块当前未在 `soc_top` 中例化。
 
 ## 启动程序
 
-| 版本 | 源文件 | 上板 bin | 内容 |
-| --- | --- | --- | --- |
-| v1 | `prog/start.S` | `build/soc/start.bin` | 顶行粉 + 第 1 行 4 像素红（其余区域是 ExtRAM 上电随机值） |
-| v2 | `prog/start_v2.S` | `build/soc/start_v2.bin` | 整屏填蓝 + 粉色顶边 + 白色底边/左右列（整屏干净） |
+### CPU RGB332 与双缓冲显示测试
+
+在仓库根目录执行：
+
+```bash
+source requirements/env.sh
+make -C sw framebuffer-soc-test
+```
+
+该目标先运行独立主机像素/字模测试并生成 `expected0/1.hex`，再编译 `framebuffer_soc.cpp` 和实际驱动，传入 `+framebuffer-test`。测试由 [framebuffer_scenarios.svh](framebuffer_scenarios.svh) 驱动，CPU 分别在 FB1/FB0 清屏、画边框、数字和裁剪图元；每次提交完成后采集完整帧，各比对 480000 个像素，并导出 `actual0/1.hex`。
+
+正常显示后，再在有效扫描中用零等待期限测试 present/begin 超时，等待硬件实际完成并恢复提交。最终 22 项固件检查通过，4 次请求对应 4 次 VSYNC 切换，244629 次 CPU 显存写入全部位于当前后台且为整字使能，三个缓冲边界哨兵保持不变。结果标记 `0x600DFB00`，main 返回 `_boot_halt`。
+
+`FRAMEBUFFER_SYMBOLS` 提供固件符号表，`FRAMEBUFFER_GOLDEN` 指向两幅 golden 文件目录。`framebuffer_compare.py` 再核对 960000 像素并输出实际采样 PNG 与 `comparison.json`（依赖 Pillow，已列入项目环境要求）。完整产物见本地 [显示测试交付](../../outputs/framebuffer-20261114-v1/README.md)。输入与原启动测试仍可通过各自目标运行。
+
+本轮借鉴参考提交 `2103134` 的 `start_v2.S`，保持当前 RTL。用户报告参考版本已实板验证 VGA；本版 C++ 驱动使用本轮 CPU 仿真与完整图像核验，实机验证记录单独补充。
+
+### CPU 按键输入整机测试
+
+在仓库根目录执行（WSL bash）：
+
+```bash
+source requirements/env.sh
+make -C sw input-soc-test
+```
+
+构建源为 `sw/tests/input_soc.cpp`、`sw/drv/input.cpp` 和已验证的启动层。测试台使用 `+input-test` 进入 [input_scenarios.svh](input_scenarios.svh)，驱动板级按键和拨码引脚；CPU 通过完整 AXI/总线/confreg 链路读取 BTN/KEY。固件写 STEP 发起/完成阶段，测试台在事件稳定后设置 KEY 允许 CPU 检查，随后释放引脚并清 KEY。
+
+| 阶段 | 输入与验证 |
+| --- | --- |
+| 1 | 上键持续按下，CPU 首次取得事件，之后重复轮询返回 None |
+| 2～4 | 左、下、右单键，各报告一次后读清 |
+| 5 | 四键同时按下，CPU 读到原始 `0xF`，读清后软件仍依次返回其余方向 |
+| 6 | 上、下脉冲先后累积，CPU 读到 `0x5` 并分别消费 |
+| 7～8 | 同方向两次未读事件合并为一位；释放后再按产生新事件 |
+| 9～10 | clear 分别清除软件剩余位和硬件未读事件 |
+| 11～12 | 拨码高位均为 1，KEY 低两位分别为 1/2，CPU 正确读取电平 |
+
+实际结果：12 阶段、49 项固件检查通过，`input_test_result=0x600D1A00`、main 返回 `_boot_halt`，LED/数码管检查通过。测试台另外逐阶段核对 CPU 对 BTN 的读取次数、非零响应数量和原始位值。结果为 `RESULT: PASS (CPU input test)` / `SOC_SIM: PASS`；本用例集中验证输入，原汇编/C++ 启动模式保留完整帧检查。
+
+产物默认在 `${LA32R_BUILD:-$HOME/build/la32r}/sw/input-soc/`，包括 ELF、BIN、HEX、map、符号、反汇编；日志在 `soc/log.txt`。`INPUT_SYMBOLS` 指向固件符号表，`boot_symbols.py ... input` 生成结果、检查计数和停机地址的元数据。归档见本地 [input-soc-20261114-v1](../../outputs/input-soc-20261114-v1/README.md)。
+
+按键边沿经同步稳定后 CPU 才读取；当前 RTL 的读清/新边沿同拍清零行为记录于 [SoC README](../../soc/README.md)，该组合待硬件专项处理。测试中持续高电平覆盖多次 CPU 读取，机械触点抖动和实际按键时长在板上另行验收。
+
+### C++ 裸机启动自检（2026-11-14）
+
+在仓库根目录执行：
+
+```bash
+source requirements/env.sh
+make -C sw board-smoke-test
+make -C sw board-smoke-wave
+```
+
+该目标构建 `sw/boot/crt0.S`、`sw/boot/link.ld` 与 `sw/tests/board_smoke.cpp`，将生成的 HEX 通过 `PROGRAM_HEX` 接入本测试。`SMOKE_SYMBOLS` 指向 `nm -n` 符号表，`boot_symbols.py` 提取 data/BSS/结果/停机符号；`RUN_ARGS=+cpp-smoke` 启用初始化污染及 C++ 专项断言。原默认汇编入口保持可用。
+
+`board-smoke-wave` 输出到软件构建目录的 `board-smoke/soc/soc.vcd`，记录程序完成后 100 拍即结束。`boot_wave.tcl` 是 GTKWave 启动视图脚本，通过 `gtkwave <VCD路径> -S /mnt/f/CursorProject/LA32R-SoC/sim/soc/boot_wave.tcl` 加载。`wave` 目标会传递 `RUN_ARGS`，因此这里仍执行 C++ 专项断言。
+
+测试台先将 data 运行区及 BSS 写为 `DEADBEEF`，然后复位启动，检查初始化全局值、BSS 清零、真实函数栈校验、返回 `_boot_halt`、LED/数码管和视频帧。实测 7600 拍完成，结果标记 `600D2048`、栈校验 `AA`，所有断言通过。原汇编自检回归也通过（8132 拍）。详见 [sw/README.md](../../sw/README.md)。
+
+### 原汇编自检
 
 `prog/start.S`：链接在 `0x1C00_0000`，无栈、无 TLB：
 
@@ -86,23 +149,46 @@ sim/soc/tb_soc_top.sv 直接例化 thinpad_top，RAM 模型接 board 引脚
 3. FB0 第 200 字填 `0xE0E0E0E0`（红）
 4. `STATUS[13] = 1`（WIN 标志，仿真据此判定程序跑完）
 
-### 工具链坑（重要）
+### 工具链与验证范围
 
-本仓库默认的 **2022-05-20 工具链**会把伪指令 `bnez` 编成 **0x13 操作码**，而
-openLA500 只实现最终 LA32R 的 `bne`（0x17）——`bnez` 会被译成非法指令，PC 跳到
-`EENTRY=0` 死循环。**汇编里请写 `bne $rj, $r0, label`**，不要用 `bnez`。
+当前团队分发 LA32 v2.0（2023-09-03 / GCC 8.3.0），通过 `source requirements/env.sh` 加载。现有自检使用显式 `bne $r8, $r0, label`。旧 README 记录过旧工具链 `bnez` 编码兼容问题，当前测试覆盖的是该自检程序实际使用的指令序列。
 
-> 如果升级到 README 里的 LA32 v2.0 工具链（Git LFS），该问题应消失，但需另行验证。
+测试台时钟为 100 MHz、按周期检查功能；硬件设计及 XDC 使用 50 MHz。测试台按键/拨码输入固定 0，ExtRAM 初始填零。完整回归采集 480000 个有效像素并抽查 5 个位置。波形短运行目标跳过整帧。CPU 主动读取按键、执行 FB_CTRL 翻页以及 C++ 游戏固件均需后续测试。
 
 ## 判定标准
 
 - `STATUS[13]` 在超时前置 1（程序跑完）
-- `STEP=1234` → `LED[4:0]=12`、数码管 33/34 段码正确
+- `STEP=1234` → `LED[4:0]=12`、数码管显示 34 的段码正确
 - 采一整帧 VGA：`(0,0)`/`(3,0)` 为 `0xEF`，`(0,1)`/`(3,1)` 为 `0xE0`，`(4,1)` 为 0
 - 无 `RESULT: FAIL`
 
 ## 后续
 
-1. 队友正式 AXI 桥到位后替换 `axi_slave_ref.v`，跑同一套仿真
-2. 把 `thinpad_top.v` 改成对 `soc_top` 的封装（接 PLL/复位/未用引脚）
-3. 加 `crt0.S`（栈、`.bss` 清零、DMW/TLB 配置）与真正的 2048 软件
+2026-11-14 本次复验：LA32 v2.0 工具链、Verilator 5.032，`RESULT: PASS` / `SOC_SIM: PASS`。程序 8132 拍完成，LED/数码管、480000 像素采集及 5 个抽查像素通过。编译存在既有位宽警告，默认构建使用 `-Wno-fatal`；独立 `lint`、综合及时序验收分别执行。本次日志在 WSL `/home/caohw/build/la32r/soc-review-20261114/log.txt`。
+
+1. 已完成最小 C++ 启动层和 data/BSS/栈自检；后续程序沿用已验证的入口和内存布局。
+2. 输入及显示驱动已通过 CPU 测试；下一步接入 LA32R 平台后端并用完整游戏镜像回归。
+3. 接入现有 2048 核心，固定种子回放并完成板级 SRAM 加载/复位/显示验收。
+
+## 冒烟程序 v1 / v2
+
+| 版本 | 源文件 | 上板 bin | 内容 |
+| --- | --- | --- | --- |
+| v1 | `prog/start.S` | `build/soc/start.bin` | 第 0 行粉 + 第 1 行 4 像素红（其余是 ExtRAM 上电随机值） |
+| v2 | `prog/start_v2.S` | `build/soc/start_v2.bin` | 整屏蓝底 + 粉顶边 + 白底边/左右列（整屏干净） |
+
+`make run-v2` 用 `-DTB_V2` 载入 `prog_v2.hex`，并多等一帧，避开 VGA 跨帧预取
+导致左上 4 像素滞后一帧的现象。
+
+## AI 单步周期基准
+
+`make run-ai` 构建 `sw/app/ai.cpp` + `sw/tests/ai_bench_la32r.cpp`（LA32R 裸机，
+固定中局、节点预算由 `AI_BENCH_BUDGET` 控制，默认 1000），在 `STATUS[5]` 与
+`STATUS[13]` 之间计周期，并读取 BaseRAM `0x1C3F0000` 处的节点数/走法：
+
+```
+AI start @1097 cycles
+AI one-move: cycles=11168503 nodes=1000 cycles/node=11168.5 move=1
+```
+
+详细分析与优化记录见 [docs/ai-feasibility.md](../../docs/ai-feasibility.md)。

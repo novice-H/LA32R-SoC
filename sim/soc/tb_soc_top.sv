@@ -19,6 +19,8 @@ module tb_soc_top;
     always #5 clk = ~clk;          // 100 MHz 仿真时钟（按拍计时，不影响功能）
 
     reg reset_btn = 1;
+    reg [3:0] touch_btn = 0;
+    reg [31:0] dip_sw = 0;
 
     wire [31:0] base_ram_data, ext_ram_data;
     wire [19:0] base_ram_addr, ext_ram_addr;
@@ -38,8 +40,8 @@ module tb_soc_top;
         .clock_btn(1'b0),
         .reset_btn(reset_btn),
 
-        .touch_btn(4'd0),
-        .dip_sw(32'd0),
+        .touch_btn(touch_btn),
+        .dip_sw(dip_sw),
         .leds(leds), .dpy0(dpy0), .dpy1(dpy1),
 
         .base_ram_data(base_ram_data), .base_ram_addr(base_ram_addr),
@@ -99,14 +101,32 @@ module tb_soc_top;
         end
     endtask
 
+    `include "input_scenarios.svh"
+    `include "framebuffer_scenarios.svh"
+
     integer timeout, n;
     integer cyc = 0;
     integer cyc0, cyc1;
     reg [31:0] ai_nodes, ai_move;
     always @(posedge clk) cyc = cyc + 1;
+    reg cpp_smoke;
+    reg [31:0] boot_symbols [0:6];
+    integer poison_addr;
 
     initial begin
         $display("=== soc_top full-system testbench ===");
+        cpp_smoke = $test$plusargs("cpp-smoke");
+        if (cpp_smoke) begin
+            $readmemh("boot-symbols.hex", boot_symbols);
+            // SRAM models finish image loading at time 0. Dirty the runtime
+            // data/BSS destination so successful startup must copy and clear.
+            #1;
+            for (poison_addr = int'(boot_symbols[0]); poison_addr < int'(boot_symbols[1]); poison_addr += 4)
+                u_base_ram.mem[(poison_addr - 'h1c000000) >> 2] = 32'hdeadbeef;
+            for (poison_addr = int'(boot_symbols[2]); poison_addr < int'(boot_symbols[3]); poison_addr += 4)
+                u_base_ram.mem[(poison_addr - 'h1c000000) >> 2] = 32'hdeadbeef;
+            $display("CPP_BOOT: runtime data/BSS poisoned before reset release");
+        end
         if ($test$plusargs("wave")) begin
             $dumpfile("soc.vcd");
             $dumpvars(1, tb_soc_top.dut);
@@ -114,6 +134,18 @@ module tb_soc_top;
         end
         repeat (20) @(posedge clk);
         reset_btn = 0;
+
+        if ($test$plusargs("input-test")) begin
+            run_input_scenarios();
+            if (errors == 0) $display("RESULT: PASS (CPU input test)");
+            else             $display("RESULT: FAIL (%0d errors)", errors);
+            $finish;
+        end else if ($test$plusargs("framebuffer-test")) begin
+            run_framebuffer_scenarios();
+            if (errors == 0) $display("RESULT: PASS (CPU framebuffer test)");
+            else             $display("RESULT: FAIL (%0d errors)", errors);
+            $finish;
+        end else begin
 
 `ifdef TB_AI
         // ---- AI 单步基准：STATUS[5] 开始，STATUS[13] 结束 ----
@@ -140,8 +172,8 @@ module tb_soc_top;
         end
         cyc1 = cyc;
 
-        ai_nodes = u_base_ram.mem[20'hFFC00];
-        ai_move  = u_base_ram.mem[20'hFFC01];
+        ai_nodes = u_base_ram.mem[20'hFC000];
+        ai_move  = u_base_ram.mem[20'hFC001];
 
         $display("AI one-move: cycles=%0d nodes=%0d cycles/node=%0.1f move=%0d",
                  cyc1 - cyc0, ai_nodes,
@@ -165,6 +197,7 @@ module tb_soc_top;
         else             $display("RESULT: FAIL (%0d errors)", errors);
         $finish;
 `else
+
         // 等程序写完 STATUS[13]
         timeout = 0;
         while (leds[13] !== 1'b1 && timeout < 8_000_000) begin
@@ -184,10 +217,24 @@ module tb_soc_top;
         check32({24'd0, dpy1}, 32'hB6, "数码管十位 seg7(3)");
         check32({24'd0, dpy0}, 32'hD2, "数码管个位 seg7(4)");
 
+        if (cpp_smoke) begin
+            timeout = 0;
+            while (dbg_wb_pc != boot_symbols[6] && timeout < 10000) begin
+                @(posedge clk);
+                timeout += 1;
+            end
+            check32(dbg_wb_pc, boot_symbols[6], "C++ main returned to boot halt");
+            check32(u_base_ram.mem[(boot_symbols[4] - 'h1c000000) >> 2],
+                    32'h600d2048, "C++ data/BSS/stack self-check");
+            check32(u_base_ram.mem[(boot_symbols[5] - 'h1c000000) >> 2],
+                    32'haa, "C++ stack function checksum");
+        end
+
         // 波形模式：跑完程序就停，不采整帧
         if ($test$plusargs("short")) begin
             repeat (100) @(posedge clk);
-            $display("RESULT: PASS (wave run)");
+            if (errors == 0) $display("RESULT: PASS (wave run)");
+            else             $display("RESULT: FAIL (%0d errors)", errors);
             $finish;
         end
 
@@ -195,8 +242,6 @@ module tb_soc_top;
         while (video_vsync === 1'b1) @(posedge clk);
         while (video_vsync === 1'b0) @(posedge clk);
 `ifdef TB_V2
-        // VGA 在上一帧末尾预取下一帧的 word0；程序若在此之后改写，
-        // 第一帧左上 4 像素会滞后一帧。多等一帧再采样即可。
         while (video_vsync === 1'b1) @(posedge clk);
         while (video_vsync === 1'b0) @(posedge clk);
 `endif
@@ -240,6 +285,7 @@ module tb_soc_top;
         else             $display("RESULT: FAIL (%0d errors)", errors);
         $finish;
 `endif
+        end // Default assembly/C++ startup suite.
     end
 
 endmodule

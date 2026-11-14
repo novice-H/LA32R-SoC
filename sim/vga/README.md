@@ -5,6 +5,8 @@
 
 > **默认 DUT 仍是 `dut_placeholder.v`（占位实现）。** 正式帧缓冲核心 `soc/vga_fb.v`
 > 已经入仓，配套包装器为 `vga/dut_vga_fb.v`，接法见第 5 节；testbench 无需改动。
+>
+> 2026-11-14：正式 `vga_fb` 已在 `soc_top` 接入 CPU、confreg 和真实存储链路，`thinpad_top` 已完成板级封装。这里的默认占位 DUT 指本专项 Makefile 的默认选择。最新集成及验证状态见 [SoC README](../../soc/README.md)。
 
 ---
 
@@ -200,11 +202,11 @@ make DUT="vga/dut_my_vga.v ../soc/my_dvi_top.v"
    CPU 在每组 4 拍里只能拿到 1 个空闲拍（约 25% 带宽）。若以后 CPU 带宽不够，
    再补 FIFO，接口不用变。
 2. **翻页**：测试台直接拨 `fb_sel` 模拟 confreg；`vga_fb` 已能处理翻页（补取新基址
-   word0）并输出 `vsync_start`，接 confreg 时把两者对接即可。
+   word0）并输出 `vsync_start`；当前 `soc_top` 已连接 confreg，CPU 发起翻页的整机回归待补。
 3. **CPU 争用已覆盖**：`cpu_noise` 持续读写高地址区，仿真校验其读回正确且不被饿死，
    同时两帧图像必须 100% 一致。
 5. **vsync_start 已输出**：`(hcnt==0 && vcnt==600)` 的单拍脉冲，周期与场周期一致，
-   仿真里已逐项校验；confreg 接进来后直接用它翻转 `fb_sel`。
+   仿真里已逐项校验；当前 `soc_top` 已连接至 confreg，在消隐起点处理挂起翻页请求。
 6. 图案配色沿用 `docs/design.md` 的 `0x6D / 0xEF / 0x00`。注意：按
    `{R[2:0],G[2:0],B[1:0]}` 位定义，`0xEF` 展开是 (255,109,255) **品红**，
    文档里写的 "R224 G224 B192 米白" 实际对应 `0xFF`——上板前建议统一口径。
@@ -213,6 +215,6 @@ make DUT="vga/dut_my_vga.v ../soc/my_dvi_top.v"
 
 ## 7. 下一步
 
-- Phase 2：把 `vga_dut` 换成正规模块，接 `thinpad_top.v`（需要 PLL/UART/SEG7 的仿真 stub）
-- Phase 3：接入 CPU + confreg 的 `fb_sel`/`vsync_start`，验证双缓冲翻页
+- 当前：正式扫描器、confreg、仲裁器和 CPU 已接入 `soc_top`，板级顶层已封装，无需旧演示 PLL/UART/SEG7 stub。
+- 下一步：运行 CPU 写 FB_CTRL 的整机双缓冲翻页测试，补充真实按键、完整游戏棋盘和板级显示验收。
 - 可选：动画测试（连续多帧 + 翻页），把 `tb_main.cpp` 扩成多帧采集与逐帧比对

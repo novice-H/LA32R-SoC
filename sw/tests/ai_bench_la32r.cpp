@@ -9,7 +9,7 @@
 #define AI_BENCH_BUDGET 1000   // 仿真时长考虑；可与 PC 的 10000 对齐
 #endif
 
-extern "C" void ai_bench_main(void) {
+extern "C" int main(void) {
     volatile uint32_t* cfg = (volatile uint32_t*)0xBFD00000u;
 
     // 指数表示：1=2, 2=4, ..., 10=1024
@@ -25,10 +25,11 @@ extern "C" void ai_bench_main(void) {
     uint64_t nodes = 0;
     int m = ai::best_move(b, AI_BENCH_BUDGET, 8, &nodes);
 
-    *(volatile uint32_t*)0x1C3FF000u = (uint32_t)nodes;
-    *(volatile uint32_t*)0x1C3FF004u = (uint32_t)(m + 1);
+    *(volatile uint32_t*)0x1C3F0000u = (uint32_t)nodes;
+    *(volatile uint32_t*)0x1C3F0004u = (uint32_t)(m + 1);
     cfg[0] = (uint32_t)(nodes & 0xFFFu);
     cfg[1] = 0x2000u;   // STATUS[13] = 完成（对应 LED[13]）
 
     for (;;) {}
+    return 0;
 }
