@@ -72,34 +72,87 @@ if {[catch {
             } else {
                 catch {upgrade_ip -quiet [get_ips]}
                 puts "IP: $ip_count 个"
+                # 不要在这里调 generate_target：
+                #   openLA500 的 IP 是 .xcix 容器，generate_target 会把产物
+                #   回写进 .xcix 本体（跟踪文件，会被改动成脏状态）。
+                #   下面用 launch_runs 的工程运行流，Vivado 会在
+                #   runs 目录里自行生成输出产物并做 OOC 综合。
             }
         }
     }
 
     # ------------------------------------------------------------ 约束
     add_files -fileset constrs_1 -norecurse $ROOT/constraints/thinpad_top.xdc
+    add_files -fileset constrs_1 -norecurse $ROOT/constraints/config_vtg.xdc
     set_property top $TOP [current_fileset]
 
-    # ------------------------------------------------------------ 综合/实现
-    synth_design -top $TOP -part $PART
+    file mkdir [file join $PROJ_DIR reports]
 
-    # 配置电压属性（避免 write_bitstream 的 CFGBVS 检查告警）
-    catch { set_property CFGBVS VCCO       [current_design] }
-    catch { set_property CONFIG_VOLTAGE 3.3 [current_design] }
+    # ------------------------------------------------------------ 综合/实现（工程运行流）
+    # 必须用 launch_runs，不能直接调用 synth_design：
+    #   openLA500 的 cache SRAM 是 .xcix 容器形式提供的，只有 Vivado 的
+    #   run 管理会去解包容器、生成输出产物并做 OOC 综合。直接 synth_design
+    #   时容器里的模块不可见，会报：
+    #     ERROR: [Synth 8-439] module 'data_bank_sram' not found
+    #   而 dcache.v 里同名模块只是 `ifdef SIMU 下的行为兜底，综合时不存在。
+    puts "==> launch_runs synth_1"
+    launch_runs synth_1 -jobs 4
+    wait_on_run synth_1
+    if {[get_property PROGRESS [get_runs synth_1]] ne "100%"} {
+        error "synth_1 失败（status=[get_property STATUS [get_runs synth_1]]），见 $PROJ_DIR/thinpad.runs/synth_1/runme.log"
+    }
 
-    opt_design
-    place_design
-    route_design
+    puts "==> launch_runs impl_1 -to_step write_bitstream"
+    # 实现策略：默认策略在 openLA500 的 TLB 匹配路径上有约 -0.5ns 违例
+    # （该路径布线延迟占 72%，且东向拥塞达 97%，属布局/拥塞问题而非逻辑深度）。
+    # Performance_ExplorePostRoutePhysOpt 会在布线后追加物理优化，
+    # 对"布线占比高"的违例最有效，且不需要改动任何 RTL。
+    catch { set_property strategy Performance_ExplorePostRoutePhysOpt [get_runs impl_1] }
+    launch_runs impl_1 -to_step write_bitstream -jobs 4
+    wait_on_run impl_1
+    if {[get_property PROGRESS [get_runs impl_1]] ne "100%"} {
+        error "impl_1 失败（status=[get_property STATUS [get_runs impl_1]]），见 $PROJ_DIR/thinpad.runs/impl_1/runme.log"
+    }
 
     # ------------------------------------------------------------ 报告
-    file mkdir [file join $PROJ_DIR reports]
+    open_run impl_1 -quiet
     report_utilization    -file [file join $PROJ_DIR reports utilization.rpt]
     report_timing_summary -file [file join $PROJ_DIR reports timing_summary.rpt]
     report_drc            -file [file join $PROJ_DIR reports drc.rpt]
     report_power          -file [file join $PROJ_DIR reports power.rpt]
 
     # ------------------------------------------------------------ bit
-    write_bitstream -force $BIT
+    # impl_1 生成的 bit 名字取自顶层模块，再复制到约定的 $BIT 路径
+    set impl_bit [file join $PROJ_DIR thinpad.runs impl_1 ${TOP}.bit]
+    if {![file exists $impl_bit]} {
+        error "impl_1 已跑完但找不到 bit：$impl_bit"
+    }
+    file copy -force $impl_bit $BIT
+
+    # 再放一份到入库的交付目录：
+    #   vivado/build/  整个构建目录被 .gitignore 忽略（本地产物，不入库）
+    #   vivado/artifacts/ 是交付目录，.gitignore 里对 *.bit 做了例外，会入版本库
+    # 这样构建完成后 git status 能直接看到需要提交的新 bit。
+    set ART_DIR [file join $ROOT vivado artifacts]
+    file mkdir $ART_DIR
+    file copy -force $impl_bit [file join $ART_DIR ${TOP}.bit]
+    puts " 交付副本 : [file join $ART_DIR ${TOP}.bit]"
+
+    # ------------------------------------------------------------ 时序检查
+    # 把时序结果显式打到控制台：Vivado 即使时序不收敛也会照常生成 bit，
+    # 不主动检查就很容易带着违例的 bit 去上板。
+    set wns [get_property SLACK [get_timing_paths -delay_type max -max_paths 1 -nworst 1]]
+    set whs [get_property SLACK [get_timing_paths -delay_type min -max_paths 1 -nworst 1]]
+    puts "============================================================"
+    puts " WNS (setup) : $wns ns"
+    puts " WHS (hold)  : $whs ns"
+    if {$wns < 0} {
+        puts " WARNING: 时序未收敛！bit 已生成但可能不可靠。"
+        puts "          详见 [file join $PROJ_DIR reports timing_summary.rpt]"
+    } else {
+        puts " 时序已收敛"
+    }
+    puts "============================================================"
 
     puts "============================================================"
     puts " BITSTREAM : $BIT"

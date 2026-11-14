@@ -40,6 +40,16 @@ Xilinx/
 *.sim/
 *.ip_user_files/
 
+# xsim 仿真实例目录（本地生成）
+xsim.dir/
+
+# ---------- 交付物例外 ----------
+# 构建出的 bit 需要入库，供队友和评审直接取用。
+# 注意：vivado/build/ 整个构建目录仍然忽略，只有复制到 artifacts/ 的最终产物入库。
+# 下面两条必须放在上面的 *.bit 规则之后才能生效。
+!vivado/artifacts/
+!vivado/artifacts/*.bit
+
 # ---------- 编辑器 / 系统 ----------
 .vscode/
 .idea/

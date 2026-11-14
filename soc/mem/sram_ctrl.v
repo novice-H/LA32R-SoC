@@ -46,7 +46,7 @@ module sram_ctrl #(
 
     localparam integer RAM_CYC = (CLK_FREQ + RAM_FREQ - 1) / RAM_FREQ;
     localparam integer CYC_W   = (RAM_CYC <= 1) ? 1 : $clog2(RAM_CYC);
-    localparam [CYC_W-1:0] LAST = CYC_W'(RAM_CYC - 1);
+    localparam [CYC_W-1:0] LAST = RAM_CYC - 1;   // Verilog-2001：隐式截断到 CYC_W 位
 
     reg              busy;
     reg [CYC_W-1:0]  cyc;
@@ -77,7 +77,7 @@ module sram_ctrl #(
     // 原设计 RAM.sv 也用了同样的处理。
     initial begin
         busy      = 1'b0;
-        cyc       = '0;
+        cyc       = {CYC_W{1'b0}};
         addr_q    = 20'd0;
         be_n_q    = 4'hf;
         we_q      = 1'b0;
@@ -93,7 +93,7 @@ module sram_ctrl #(
     always @(posedge clk) begin
         if (rst) begin
             busy      <= 1'b0;
-            cyc       <= '0;
+            cyc       <= {CYC_W{1'b0}};
             addr_q    <= 20'd0;
             be_n_q    <= 4'hf;
             we_q      <= 1'b0;
@@ -110,7 +110,7 @@ module sram_ctrl #(
                 if (req_valid) begin
                     // 接受请求：当拍就拉低 CE，进入访问窗口
                     busy      <= 1'b1;
-                    cyc       <= '0;
+                    cyc       <= {CYC_W{1'b0}};
                     addr_q    <= req_addr;
                     be_n_q    <= req_be_n;
                     we_q      <= req_we;
