@@ -13,6 +13,7 @@
 | `sw/hal/platform_pc.cpp` | POSIX 终端按键、字符棋盘、伪随机数 | 板级构建选择新的后端 |
 | `sw/tests/game_test.cpp` | 固定棋盘、固定随机序列的规则验证 | PC 回归；也可供仿真复用测试输入 |
 | `sw/tests/pc_test.py` | 输入回放和伪终端交互检查 | PC 测试工具 |
+<<<<<<< HEAD
 | [`sw/boot/crt0.S`](../sw/boot/crt0.S) | 设置启动栈、复制 `.data`、清零 `.bss`、调用 `main`；`main` 返回后停在 `_boot_halt` | 已有启动层；当前由 SoC smoke image 验证 |
 | [`sw/boot/link.ld`](../sw/boot/link.ld) | 将镜像链接到 BaseRAM `0x1C00_0000`，定义 data LMA/VMA、BSS、栈顶和边界断言 | 已有 smoke 链接布局；动态 C++ 初始化目前由断言禁用 |
 | [`sw/tests/board_smoke.cpp`](../sw/tests/board_smoke.cpp) | 检查初始化 data、BSS 清零、栈读写、confreg 和 FB0 写入 | 独立自检入口，用于启动与硬件通路验收 |
@@ -26,6 +27,12 @@
 | `sw/third_party/2048.cpp.LICENSE` | 上游版权和 MIT 许可 | 随代码保留 |
 
 板级抽象接口已在 [`sw/hal/platform.h`](../sw/hal/platform.h) 声明：`read_event()`、`render()` 和 `random_u32()`。confreg、输入、帧缓冲/字模/翻页驱动均已实现；`platform_la32r.cpp` 和完整板级游戏固件仍待实现和链接。
+=======
+| `sw/Makefile` | PC 构建、测试和目标对象编译检查 | 后续补充完整固件目标 |
+| `sw/third_party/2048.cpp.LICENSE` | 上游版权和 MIT 许可 | 随代码保留 |
+
+后续按需新增 `sw/boot/crt0.S`、`sw/boot/link.ld`、`sw/hal/platform_la32r.cpp` 和 `sw/drv/` 中的按键、帧缓冲驱动；已有 `sw/libc/` 可放实际需要的最小运行库。板级构建选择 `platform_la32r.cpp`，PC 构建选择 `platform_pc.cpp`。
+>>>>>>> 5f57701058e76b1bb6c4717c043f8e71cdb10eee
 
 ## 数据与接口
 
@@ -84,6 +91,7 @@ void refresh_status(Game&);                // 更新 over
 
 `make -C sw test` 运行核心用例和 PC 回放/伪终端测试，覆盖四方向、合并顺序、得分步数、胜负、随机生成、确定性、方向键、重开、退出及终端恢复。用同一随机种子与同一输入序列可复现问题。
 
+<<<<<<< HEAD
 ### 已实现并通过 SoC 仿真的启动层
 
 [`sw/boot/crt0.S`](../sw/boot/crt0.S) 将栈指针设为 `0x1C40_0000`，按 32 位字从 data 的加载地址复制到运行地址，清零 BSS，再调用 `main`；`main` 返回后进入 `_boot_halt`。链接脚本 [`sw/boot/link.ld`](../sw/boot/link.ld) 将镜像放入 4 MiB BaseRAM 窗口，data 运行地址按 4 KiB 对齐，BSS 和栈空间有边界断言，并要求 `.init_array` 为空。当前启动层按静态常量初始化的 freestanding 程序使用。
@@ -114,3 +122,8 @@ AI 为选做功能，安排在基本输入、渲染和完整游戏镜像通过 S
 `Surface` 固定对应 800×600 RGB332 字缓冲。图元在裁剪后按整字写入，非四像素对齐的首尾采用字内掩码读改写，数字按透明 8×16 字模放大绘制。`Frame` 在 `begin` 成功后取得后台页；`present` 检查页号/指针/请求状态，执行 DBAR 0 后申请翻页，并等待请求清除和目标页显示。单线程提交、当前 uncached 配置下使用；超时后重新 `begin` 等待硬件完成并取下一后台。
 
 主机测试使用独立像素和字形参考，检查裁剪、字节 lane、全屏填充、0～9、十进制 0/2048/uint32 最大值和放大倍数；并通过 ASan/UBSan。CPU 测试实际绘制两幅图，以显示 RGB 端口采集的结果和 golden 逐像素比较，监控前后台写地址、字使能、VSYNC 切换、边界哨兵，验证零等待期限超时及恢复。原始结果与实际画面见本地 [framebuffer-20261114-v1](../outputs/framebuffer-20261114-v1/README.md)。
+=======
+后续板级后端将板载按键映射到 `Event`，将拨码控制转换为开始/重开等事件，`render` 负责绘制后台帧缓冲并完成翻页握手。步数和状态输出也由板级 `render` 更新。按键事件位序、启动入口、CPU 地址转换及 cache 属性、显存映射和翻页约定需与实际 RTL 一同验收。
+
+交叉检查只生成核心和主循环对象。完整固件还需设置栈、初始化数据段、链接所需运行库并加载到目标存储器。建议先通过最小 LED 程序，再检查输入、测试图和棋盘，最后进行 PC/SoC 固定输入回放对比。
+>>>>>>> 5f57701058e76b1bb6c4717c043f8e71cdb10eee

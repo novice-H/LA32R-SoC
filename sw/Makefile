@@ -4,6 +4,7 @@ BUILD ?= $(if $(LA32R_BUILD),$(LA32R_BUILD)/sw,$(HOME)/build/la32r/sw)
 CXXFLAGS ?= -std=c++11 -O2 -Wall -Wextra -Werror -pedantic
 CORE := app/game.cpp
 HEADERS := app/game.h hal/platform.h
+<<<<<<< HEAD
 LA32R_BUILD_DIR := $(BUILD)/la32r
 LA32R_FLAGS := $(CXXFLAGS) -march=loongarch32r -mabi=ilp32s -ffreestanding -fno-exceptions -fno-rtti -fno-pic -fno-pie -fno-stack-protector
 SMOKE_DIR := $(BUILD)/board-smoke
@@ -12,6 +13,10 @@ INPUT_DIR := $(BUILD)/input-soc
 FRAMEBUFFER_DIR := $(BUILD)/framebuffer-soc
 
 .PHONY: all play test cross-check cross-artifacts board-smoke board-smoke-test board-smoke-wave input-soc input-soc-test framebuffer-test framebuffer-soc framebuffer-soc-test
+=======
+
+.PHONY: all play test cross-check
+>>>>>>> 5f57701058e76b1bb6c4717c043f8e71cdb10eee
 all: $(BUILD)/2048
 
 $(BUILD):
@@ -34,6 +39,7 @@ test: $(BUILD)/game_test $(BUILD)/2048
 cross-check: | $(BUILD)
 	$(CROSS)g++ $(CXXFLAGS) -ffreestanding -fno-exceptions -fno-rtti -c $(CORE) -o "$(BUILD)/game.la32r.o"
 	$(CROSS)g++ $(CXXFLAGS) -ffreestanding -fno-exceptions -fno-rtti -c app/main.cpp -o "$(BUILD)/main.la32r.o"
+<<<<<<< HEAD
 
 # Current game sources compiled for mycpu; complete firmware requires a board backend.
 cross-artifacts: | $(BUILD)
@@ -153,3 +159,5 @@ framebuffer-soc-test: framebuffer-test framebuffer-soc
 	    FRAMEBUFFER_SYMBOLS="$(abspath $(FRAMEBUFFER_DIR)/framebuffer.nm)" \
 	    FRAMEBUFFER_GOLDEN="$(abspath $(FRAMEBUFFER_DIR))" RUN_ARGS=+framebuffer-test run
 	python3 tests/framebuffer_compare.py "$(FRAMEBUFFER_DIR)" "$(FRAMEBUFFER_DIR)/soc" "$(FRAMEBUFFER_DIR)"
+=======
+>>>>>>> 5f57701058e76b1bb6c4717c043f8e71cdb10eee
