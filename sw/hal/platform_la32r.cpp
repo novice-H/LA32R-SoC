@@ -42,6 +42,10 @@ void render(const game2048::Game& game) {
     }
 }
 
+bool ai_mode_requested() {
+    return (input::keys() & confreg::kAiEnable) != 0;
+}
+
 uint32_t random_u32(void*) {
     random_state ^= random_state << 13;
     random_state ^= random_state >> 17;

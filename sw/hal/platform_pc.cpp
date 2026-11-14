@@ -34,6 +34,8 @@ int sequence_byte() {
 } // namespace
 
 namespace platform {
+bool ai_mode_requested() { return false; }
+
 Event read_event() {
     static Terminal terminal;
     // Unbuffered input keeps poll() and stdio on the same byte stream.

@@ -19,8 +19,8 @@ all: $(BUILD)/2048
 $(BUILD):
 	mkdir -p "$@"
 
-$(BUILD)/2048: $(CORE) app/main.cpp hal/platform_pc.cpp $(HEADERS) | $(BUILD)
-	$(CXX) $(CXXFLAGS) $(CORE) app/main.cpp hal/platform_pc.cpp -o "$@"
+$(BUILD)/2048: $(CORE) $(AI_MODE_CORE) $(AI_CORE) app/main.cpp hal/platform_pc.cpp $(HEADERS) app/ai_mode.h app/ai.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) $(CORE) $(AI_MODE_CORE) $(AI_CORE) app/main.cpp hal/platform_pc.cpp -o "$@"
 
 $(BUILD)/game_test: $(CORE) tests/game_test.cpp app/game.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) $(CORE) tests/game_test.cpp -o "$@"
@@ -173,7 +173,13 @@ framebuffer-soc-test: framebuffer-test framebuffer-soc
 GAME_DIR ?= $(BUILD)/game
 GAME_SEED ?= 0
 GAME_RUN_ARGS ?= +game-test
-GAME_SOURCES := app/game.cpp app/main.cpp hal/platform_la32r.cpp hal/board_render.cpp drv/input.cpp drv/framebuffer.cpp
+# 1 = 开 I/D-Cache（AI 模式快约 8 倍；板级用；仿真测试默认 0）
+GAME_CACHE ?= 0
+GAME_DEFS := -DGAME2048_SEED=$(GAME_SEED)
+ifeq ($(GAME_CACHE),1)
+GAME_DEFS += -DGAME2048_USE_CACHE
+endif
+GAME_SOURCES := app/game.cpp app/ai.cpp app/ai_mode.cpp app/main.cpp hal/platform_la32r.cpp hal/board_render.cpp drv/input.cpp drv/framebuffer.cpp boot/cache_enable.S
 GAME_HEADERS := $(HEADERS) hal/board_render.h drv/input.h drv/framebuffer.h drv/font_digits.h drv/confreg.h
 .PHONY: firmware game-soc-test game-live-test game-config
 game-config:
@@ -185,7 +191,7 @@ $(GAME_DIR)/seed.config: game-config
 	@:
 
 $(GAME_DIR)/game.elf: $(GAME_SOURCES) $(GAME_HEADERS) boot/crt0.S boot/link.ld Makefile $(GAME_DIR)/seed.config
-	$(CROSS)g++ $(SMOKE_FLAGS) -DGAME2048_SEED=$(GAME_SEED) -static -no-pie -nostdlib -nostartfiles \
+	$(CROSS)g++ $(SMOKE_FLAGS) $(GAME_DEFS) -static -no-pie -nostdlib -nostartfiles \
 	    -Wl,--build-id=none,-Map,$(GAME_DIR)/game.map -T boot/link.ld \
 	    boot/crt0.S $(GAME_SOURCES) -lgcc -o "$@"
 	test -z "$$($(CROSS)nm -u "$@")"

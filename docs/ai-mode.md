@@ -29,8 +29,8 @@ Game（2/4/... 数值棋盘）  ←→  ai_mode（换算 + 模式/预算）  ←
 ```cpp
 #include "../app/ai_mode.h"
 
-// 模式来源示例：拨码 SW1（dip_sw[0]）高电平 = AI
-const bool want_ai = (read_dip_sw() & 1u) != 0;
+// 模式来源：板级 KEY1（confreg 的 kAiEnable = bit1）
+const bool want_ai = platform::ai_mode_requested();
 ai_mode::set_mode(want_ai ? ai_mode::Mode::AI : ai_mode::Mode::Manual);
 
 // 主循环
@@ -58,8 +58,10 @@ if (ai_mode::mode() == ai_mode::Mode::AI) {
 1. **AI 模式下 `read_event()` 仍要调用**，用于处理 Restart/Quit；板级的
    `read_event()` 必须是非阻塞轮询。
 2. 胜负判断沿用 `game.won` / `game.over`，`step()` 内部会 `refresh_status`。
-3. 模式切换建议用拨码 SW1（或某个按键长按）；重启后模式保持。
-4. 建议在屏幕角落或 `LED[15]` 显示 AI 指示，`ai_mode::last_nodes()` 可显示搜索量。
+3. 模式切换用 **KEY1**（`confreg::kAiEnable`，bit1）；KEY0 仍是游戏使能/暂停。
+4. `board_render` 会把 `STATUS.AI`（bit15）置位，对应 **LED[15]** 指示 AI 模式；
+   `ai_mode::last_nodes()` 可显示搜索量。
+5. 已接入 `main.cpp`：AI 模式下仍先处理 Restart/Pause/Quit，再走 AI 落子。
 
 ## 预算 vs 时间（50 MHz）
 
@@ -74,12 +76,20 @@ if (ai_mode::mode() == ai_mode::Mode::AI) {
 
 ## Cache 与帧缓冲
 
-如果板级启动调用 `sw/boot/cache_enable.S` 的 `boot_enable_caches()`：
+固件默认 **不开 cache**（仿真测试依赖 BaseRAM 里的 `game_snapshot`，开 cache 后
+dcache 写回会让测试台读到旧值）。板级构建用：
+
+```bash
+make -C sw firmware GAME_CACHE=1 GAME_DIR=.../game-cache
+```
+
+此时 `main()` 会调用 `boot_enable_caches()`，并把 AI 预算提到 10000；默认（无 cache）
+预算 3000。
 
 - RAM（代码/栈/BaseRAM）可缓存，confreg 与 ExtRAM 别名（`0xA000_0000`）不缓存；
-- **FP 缓冲 `0x1C400000` 在可缓存段内**，绘图必须改用 `0xA000_0000` 别名，
-  或画完做 cache 写回，否则 VGA 可能读到旧像素；
-- 不启用 cache 也能跑，只是慢约 8 倍。
+- 帧缓冲常量已改为 **`0xA000_0000` / `0xA008_0000`**（不可缓存别名），
+  开 cache 时 VGA 也能立即读到新像素；
+- 不开 cache 也能跑，只是 AI 慢约 8 倍。
 
 ## 测试
 

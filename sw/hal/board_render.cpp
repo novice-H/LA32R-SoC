@@ -4,6 +4,7 @@
 
 #include "../drv/confreg.h"
 #include "../drv/framebuffer.h"
+#include "../drv/input.h"
 
 extern "C" {
 extern volatile std::uint32_t game_snapshot[22];
@@ -165,9 +166,13 @@ bool render(const game2048::Game& game, bool active) {
     }
     confreg::write(confreg::Register::Step,
                    game.moves > 3199u ? 3199u : game.moves);
-    confreg::write(confreg::Register::Status,
-                   game.won ? confreg::kStatusWin :
-                   game.over ? confreg::kStatusLose : 0u);
+    {
+        const bool ai = (input::keys() & confreg::kAiEnable) != 0;
+        std::uint32_t status = game.won ? confreg::kStatusWin :
+                               game.over ? confreg::kStatusLose : 0u;
+        if (ai) status |= confreg::kStatusAi;
+        confreg::write(confreg::Register::Status, status);
+    }
     publish(&game, active);
     return true;
 }

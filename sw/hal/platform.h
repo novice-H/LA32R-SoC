@@ -13,6 +13,8 @@ void render(const game2048::Game& game);
 uint32_t random_u32(void* context);
 // Wait until KEY0 is active on the board. PC backend returns immediately.
 void wait_for_start();
+// KEY1（或等价开关）是否请求 AI 模式。PC 后端固定返回 false。
+bool ai_mode_requested();
 } // namespace platform
 
 #endif

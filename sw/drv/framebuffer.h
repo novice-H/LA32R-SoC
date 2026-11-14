@@ -8,8 +8,10 @@ namespace framebuffer {
 constexpr int kWidth = 800;
 constexpr int kHeight = 600;
 constexpr std::uint32_t kWords = 120000;
-constexpr std::uintptr_t kBuffer0 = 0x1c400000;
-constexpr std::uintptr_t kBuffer1 = 0x1c480000;
+// 用 ExtRAM 的 0xA000_0000 别名：DMW1 下 MAT=0（不可缓存），
+// 开 I/D-Cache 时 VGA 也能立即读到 CPU 写入的像素。
+constexpr std::uintptr_t kBuffer0 = 0xa0000000;
+constexpr std::uintptr_t kBuffer1 = 0xa0080000;
 
 using Color = std::uint8_t;
 
