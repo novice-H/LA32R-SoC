@@ -140,38 +140,37 @@ sram_ctrl #(.CLK_FREQ(50_000_000), .RAM_FREQ(67_000_000)) u_ctrl (
 原工程在 ExtRAM 前挂了一个"写直达、无写分配"的缓存。本项目不采用：
 
 1. openLA500 自带 dcache，再叠一层外部缓存收益低、路径长；
-2. 2048 的帧缓冲按设计走 LA32R 的 **uncached 窗口**（`0xA000_0000`），写必须直达 SRAM，
-   DVI 扫描器才能读到最新像素；
+2. 帧缓冲写入须按明确的存储属性/一致性方案让 DVI 扫描器读到最新像素。当前直接地址为
+   `0x1C400000`，`0xA0000000` 是总线译码兼容别名；cache 属性由 CPU CSR/DMW/TLB 配置决定；
 3. 少一层缓存 = 少一份一致性验证负担。
 
 如果后续确实需要，可以把 `EXT_CACHE.sv` 接在总线桥与本控制器之间，接口不变。
 
 ---
 
-## 4. 接到 2048 项目里（下一步）
+## 4. 当前 SoC 接入（2026-11-14 更新）
 
-控制器只负责"给引脚一段正确的时序"，**地址译码和仲裁不在它里面**。完整链路规划为：
+控制器提供板级 SRAM 时序；地址译码和仲裁分别由 `soc_bus`、`ext_ram_arbiter` 提供。当前 `thinpad_top → soc_top` 已接入以下链路：
 
 ```
 openLA500 (AXI3)
       │
       ▼
-axis_slave_bridge  ──►  地址译码  ──┬──► base_ram_ctrl  ──► BaseRAM 引脚
-                                    ├──► ext_ram_ctrl   ──► ExtRAM 引脚
-                                    └──► confreg
-                                          ▲
-DVI 扫描器 ───────────────────────────────┘（与 CPU 争用 ExtRAM，需仲裁）
+axi_slave_wrap ──► soc_bus ──┬──► base_ram_ctrl ──► BaseRAM 引脚
+                            ├──► ext_ram_arbiter ──► ext_ram_ctrl ──► ExtRAM 引脚
+                            └──► confreg       ▲
+vga_fb ───────────────────────────────────────┘
 ```
 
 对接时注意：
 
 1. `req_addr` 是**字地址**：`byte_addr[21:2]`，不要直接给字节地址；
-2. 读返回原始 32 位字，字节/半字提取和符号扩展在总线桥做；
+2. 读返回原始 32 位字，CPU 访存单元完成字节/半字提取和符号扩展；当前参考 AXI 从桥的窄传输支持需专项验证；
 3. 写用 `be_n` 掩码，未使能字节保持不变；
 4. ExtRAM 有 CPU 与 DVI 两个读/写主，仲裁后只让一个进控制器；
 5. `CLK_FREQ` 填实际系统频率（2048 是 50 MHz），`RAM_CYC` 会自动变成 1。
 
-`thinpad_top.v` 暂未改动；等 CPU/AXI 桥就绪后再按上面的结构接线。
+当前采用 `bus/axi_slave_ref.v` 中的 `axi_slave_wrap`。地址映射及最新整机验证记录见 [SoC README](../README.md) 和 [sim/soc/README.md](../../sim/soc/README.md)。
 
 ---
 
