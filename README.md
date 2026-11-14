@@ -2,7 +2,7 @@
 
 ## 当前状态（2026-11-14）
 
-最新硬件提交 `8ec0463` 已通过 `eae1d4c` 合并至 `game2048`，交付首版 [thinpad_top.bit](vivado/artifacts/thinpad_top.bit) 并修复 Vivado 构建流程。当前 `thinpad_top` 已接入 `soc_top`，形成 openLA500 CPU、AXI 参考从桥、地址译码、BaseRAM/ExtRAM 控制器、显示仲裁器、confreg 和帧缓冲扫描的完整 RTL 链路。软件手动 2048 已通过 PC 测试与用户试玩；启动代码、链接脚本和最小 C++ 裸机程序已通过整机仿真，板级驱动及完整游戏固件待接入。
+最新硬件提交 `8ec0463` 已通过 `eae1d4c` 合并至 `game2048`，交付首版 [thinpad_top.bit](vivado/artifacts/thinpad_top.bit) 并修复 Vivado 构建流程。当前 `thinpad_top` 已接入 `soc_top`，形成 openLA500 CPU、AXI 参考从桥、地址译码、BaseRAM/ExtRAM 控制器、显示仲裁器、confreg 和帧缓冲扫描的完整 RTL 链路。软件手动 2048 已通过 PC 测试与用户试玩；LA32R 完整游戏固件和 CPU 整机回放均已通过仿真验收，远程实机运行待平台上传验收。
 
 | 已接入资源 | 当前配置 |
 | --- | --- |
@@ -25,7 +25,7 @@ confreg/MMIO 和按键输入驱动已实现，CPU 输入整机测试的 12 个�
 
 RGB332 绘制、8×16 数字字模和双缓冲翻页驱动已实现。CPU 完整采集两幅画面共 960000 像素并全部匹配参考，4 次 VSYNC 翻页和超时恢复通过，结果见本地 [显示测试交付](outputs/framebuffer-20261114-v1/README.md)。实现借鉴用户已报告上板 VGA 验证的提交 `2103134`，本轮保持当前 RTL。
 
-下一阶段实现 `platform_la32r.cpp` 并链接完整手动游戏。具体文件、依赖和验收条件见 [软件下一阶段计划](sw/README.md#下一阶段手动游戏板级接入)。AI 为选做；板上本版 C++ 程序的 SRAM 加载、复位和实机显示继续单独验收。
+完整固件目标 `make -C sw firmware` 生成生产 `game.bin` 及 ELF/HEX/map/反汇编/符号信息；默认 `GAME_SEED=0`，由板级自由计数初始化随机源。最终生产镜像为 7080 B，SHA256 `c81c4d1df53d7da12d9015cd5b42b55aa90776740246e8cf61027a2afac4928e`；`game-live-test` 通过 CPU 启动、初始双 tile、Left 后 3 tiles/`moves=1`/`score=0` 检查。固定 seed123 的 `game-soc-test` 完整回放通过，每次 20 个状态字段匹配 host，四方向、长按、KEY0 关闭/新开与旧事件清理通过，后台缓冲/VSYNC 监控通过，VGA 480000 像素差异为 0。字模修正后首局 VGA 重验通过，实帧目视确认标题“2048”和棋盘正常。远程实验平台上传 `game.bin`，固件入口和复位地址为 BaseRAM 物理 `0x1C000000`；剩余验收为远程实机加载和运行，详见 [软件说明](sw/README.md) 与 [Vivado/远程平台装载说明](vivado/README.md)。AI 为选做。
 
 ## 目录总览
 
@@ -58,7 +58,7 @@ RGB332 绘制、8×16 数字字模和双缓冲翻页驱动已实现。CPU 完整
 | `sw/boot/` | 已实现并仿真验证：启动、数据段初始化、栈和链接脚本 |
 | `sw/libc/` | 按实际链接需求补充的最小内存函数 |
 | `sw/drv/` | 已实现 confreg/MMIO、输入、RGB332 图元、数字字模和双缓冲翻页 |
-| `sw/hal/` | 已有统一接口与 PC 后端；目标板后端待实现 |
+| `sw/hal/` | 已有统一接口、PC 后端与 LA32R 板级后端 |
 | `sw/app/` | 已实现：手动 2048 规则内核与公共主循环；AI 为选做 |
 | `ref/` | PC 端 oracle、行移动表生成器、一致性回归脚本 |
 | `tools/` | 构建入口、烧写脚本、验证脚本 |

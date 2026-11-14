@@ -59,7 +59,7 @@ BTN 使用事件位累积，同一方向的多次按压在读取前合并为一�
 
 RAND 是计数器，软件应初始化伪随机状态后生成方块，测试时保留固定种子路径。手动版将 AI 状态位保持 0 即可，AI 为选做。
 
-UART：TX 固定空闲高电平、RX 未用于 SoC 功能。Flash：片选及读写关闭、数据高阻。固件当前由仿真 RAM 预装加载；板上程序加载/复位顺序仍待实现和验证。
+UART：TX 固定空闲高电平、RX 未用于 SoC 功能。Flash：片选及读写关闭、数据高阻。仿真由 `$readmemh` 预装 RAM；远程实验平台通过外部 SRAM 装载入口上传 `game.bin`，当前 UART 与 Flash 均未连接到固件下载路径。复位及真实板级运行仍待远程平台验收。
 
 ## 4. 视频与双帧缓冲
 
@@ -76,7 +76,7 @@ UART：TX 固定空闲高电平、RX 未用于 SoC 功能。Flash：片选及读
 
 两缓冲基址相差 `0x80000`；每帧有效区域为 480000 B。四个像素按小端顺序打包为一个 32 位字，像素字节偏移为 `y*800+x`。显示扫描通过仲裁器优先访问 ExtRAM；`dvi_next` 提前预警，CPU 在显示取数间隙获得访问机会。
 
-软件读 FB_CTRL bit16 识别前台，在另一缓冲画完后写 bit0=1，再等待硬件翻转并确认请求清除。该连线已在 `soc_top` 中接入，现有 `sw/drv/framebuffer.cpp` 通过 `begin/present` 实现该协议，在提交前执行 DBAR 0。CPU 整机已验证正常翻页、零等待期限超时及后续恢复；完整手动游戏连续显示仍待平台后端接入。
+软件读 FB_CTRL bit16 识别前台，在另一缓冲画完后写 bit0=1，再等待硬件翻转并确认请求清除。该连线已在 `soc_top` 中接入，现有 `sw/drv/framebuffer.cpp` 通过 `begin/present` 实现该协议，在提交前执行 DBAR 0。CPU 整机已验证正常翻页、零等待期限超时及后续恢复；完整手动游戏后台写入/VSYNC 监控与 480000 像素比较通过。
 
 参考提交 `210313455329849aa7fc2d73eb6550c1abfb21d5` 的 `soc/` 与当前 HEAD 一致。参考 `start_v2.S` 以 120000 次整字写填充 FB0，并用首尾行/四像素边框检验显示；用户报告该版本已实板验证。本次新增 C++ 绘图/翻页驱动沿用同一地址及格式，本轮保持 RTL 和已交付 bit。
 
@@ -90,20 +90,20 @@ UART：TX 固定空闲高电平、RX 未用于 SoC 功能。Flash：片选及读
 | CPU 输入整机测试 | `input-soc-test`：12 场景、49 项固件检查通过，结果 `0x600D1A00`；四方向、长按、多键、读清、KEY 及 main 返回通过 |
 | CPU 显示整机测试 | `framebuffer-soc-test`：22 项固件检查、两幅完整图 960000 像素匹配、4 次 VSYNC 翻页及超时恢复通过，结果 `0x600DFB00` |
 | Vivado 实现 | `8ec0463` 已交付 `vivado/artifacts/thinpad_top.bit`（9730760 B）；提交记录报告 WNS=+0.211 ns、WHS=+0.048 ns、0 failing endpoints；本机未重跑 Vivado，LUT/FF/BRAM 使用量待报告 |
-| FPGA 上板 | 待提供下载、SRAM 加载、复位和真实显示/按键的验收记录 |
-| 游戏固件 | 核心已在 PC 测试和用户试玩；最小 C++ 启动已通过整机仿真，板级驱动和完整游戏固件待实现 |
+| FPGA 上板 | 待提供远程平台 bitstream 下载、`game.bin` SRAM 加载、复位及显示/按键实测记录 |
+| 游戏固件 | 生产 `game.bin` 7080 B，SHA256 `c81c4d1df53d7da12d9015cd5b42b55aa90776740246e8cf61027a2afac4928e`；live CPU 测试及 seed123 全场景回放通过，20 项快照匹配 host、VGA 480000 像素差异为 0；数字字模修正后首帧重验通过；远程实机待平台上传验收 |
 
-默认整机测试加载汇编自检；`make -C sw board-smoke-test` 加载 C++ 自检并启用初始化/函数返回检查。这两种模式的输入固定为 0，并检查 STEP/LED/数码管、480000 像素及 5 个抽查像素。新增 `make -C sw input-soc-test` 在板级引脚驱动按键和拨码，验证 CPU 运行输入驱动、真实 MMIO 读清和软件待处理位。完整棋盘逐像素比对及 CPU 驱动翻页仍待对应专项测试。测试台时钟为 100 MHz（按拍检查功能），板级 RTL/XDC 目标是 50 MHz。
+默认整机测试加载汇编自检；`make -C sw board-smoke-test` 加载 C++ 自检并启用初始化/函数返回检查。这两种模式的输入固定为 0，并检查 STEP/LED/数码管、480000 像素及 5 个抽查像素。`make -C sw input-soc-test` 在板级引脚驱动按键和拨码，验证 CPU 运行输入驱动、真实 MMIO 读清和软件待处理位。完整游戏 `game-soc-test`、最终生产镜像 `game-live-test` 及数字字模修正后的 `game-image-test` 均通过。测试台时钟为 100 MHz（按拍检查功能），板级 RTL/XDC 目标是 50 MHz。
 
 输入驱动位于 [confreg.h](../sw/drv/confreg.h)、[input.h](../sw/drv/input.h)、[input.cpp](../sw/drv/input.cpp)。输入测试通过 KEY 电平握手使事件先累积、再由 CPU 读取；BTN 读清与新 `btn_pulse` 恰逢同拍时，现有 `confreg.v` 仍以清零赋值为准，该并发组合保留为 RTL 后续修复与专项验证项。当前输入用例验证稳定输入下的读取/清除行为。机械按键消抖和实际输入延迟需上板测量。
 
-本次产物位于 WSL `/home/caohw/build/la32r/soc-review-20261114`，`log.txt` 保存运行判定。编译中存在 CPU/参考桥等位宽扩展和截断警告，当前仿真使用 `-Wno-fatal`；这些警告、独立 lint 和正式综合/时序检查仍需后续处理。249 位 XDC 覆盖检查验证的是端口名称和引脚无重复，电气及时序正确性依赖后续工具和实机验收。
+本次产物默认位于 `${LA32R_BUILD:-$HOME/build/la32r}/soc-review-20261114`，`log.txt` 保存运行判定。编译中存在 CPU/参考桥等位宽扩展和截断警告，当前仿真使用 `-Wno-fatal`；RTL 独立 lint 已通过（沿用已有 waivers），正式综合/时序检查仍待后续执行。249 位 XDC 覆盖检查验证的是端口名称和引脚无重复，电气及时序正确性依赖后续工具和实机验收。
 
 `8ec0463` 修复 `sram_ctrl.v` 的 Verilog-2001 语法兼容性，Vivado 改为 `launch_runs synth_1/impl_1` 工程运行流以处理 cache IP，并新增 `constraints/config_vtg.xdc`。构建采用 `Performance_ExplorePostRoutePhysOpt` 策略，完成后导出 bit 并打印时序。主时钟、外设资源、地址映射及 CPU 复位入口延续本页约定。
 
 仓库 bit 的 Git blob 与指定硬件提交一致，SHA256 为 `11c2dd965dc863b0a7f71f2f8754bdf5519805ba9b80afcc0075a8cbec66db3e`；文件头显示 Vivado 2023.2、器件 `7a200tfbg676`、生成时间 2026-11-14 11:31:43。实际板卡器件、下载和外部 SRAM 软件加载仍按板级验收流程核对。
 
-合并 `8ec0463` 后再次运行整机回归：`SOC_SIM: PASS`，CPU 自检仍为 8132 拍，LED/数码管、完整帧及 5 个像素检查通过。日志在 WSL `/home/caohw/build/la32r/soc-merge-20261114/log.txt`。`sram_ctrl.v:49` 的 `LAST = RAM_CYC - 1` 触发表达式截断位宽告警，当前默认参数下数值为 0，本次仿真正常；位宽告警仍列入后续 lint 审阅。
+合并 `8ec0463` 后再次运行整机回归：`SOC_SIM: PASS`，CPU 自检仍为 8132 拍，LED/数码管、完整帧及 5 个像素检查通过。日志位于 `${LA32R_BUILD:-$HOME/build/la32r}/soc-merge-20261114/log.txt`。`sram_ctrl.v:49` 的 `LAST = RAM_CYC - 1` 触发表达式截断位宽告警，当前默认参数下数值为 0；RTL 独立 lint 使用已有 waivers 并通过。
 
 复验命令和当前测试范围见 [整机仿真说明](../sim/soc/README.md)。
 
@@ -112,9 +112,10 @@ UART：TX 固定空闲高电平、RX 未用于 SoC 功能。Flash：片选及读
 1. 已完成：以 `0x1C000000` 实现 `crt0.S`、链接脚本和静态数据初始化，完整 SoC 验证 data/BSS/栈、main 返回。
 2. 已完成仿真：最小 C++ 写 LED/数码管及显存测试图，7600 拍通过；板上 SRAM 镜像加载仍待验收。
 3. 已完成输入及显示驱动整机测试：RGB332 绘制、8×16 数字、CPU 双缓冲翻页与超时恢复。244629 次整字后台写入和三个缓冲边界哨兵检查通过。
-4. 接入现有 `sw/app` 游戏核心；固定种子与操作序列，对照 PC 和整机仿真结果。
+4. 已接入 `sw/app` 游戏核心和 LA32R 平台后端；生产镜像 live CPU 测试和 seed123 全序列游戏仿真通过，CPU 状态、输入生命周期、后台写入、翻页和 VGA 全帧均匹配预期。最终生产镜像 7080 B，SHA256 `c81c4d1df53d7da12d9015cd5b42b55aa90776740246e8cf61027a2afac4928e`；数字字模修正后的首局整帧目视与像素复验通过。
+5. 远程实验平台上传生产 `game.bin`，核对 BaseRAM `0x1C000000` 装载字段和复位流程，实测显示/输入/重开与稳定运行。
 5. 检查窄访问、MMIO/显存 cache 属性和翻页，完成板上手动试玩与长时间运行。
 
 Vivado 配置及产物说明见 [vivado/README.md](../vivado/README.md)；地址译码原始证据为 [soc_bus.v](bus/soc_bus.v)，寄存器原始证据为 [confreg.v](confreg.v)。
 
-完整的软件任务顺序及验收表见 [sw/README.md](../sw/README.md#下一阶段手动游戏板级接入)。C++ 自检原始结果见本地 [cpp-smoke.log](../outputs/cpp-boot-20261114-v1/cpp-smoke.log)。
+完整的软件构建、仿真与远程平台装载流程见 [sw/README.md](../sw/README.md#完整游戏固件与整机回放)。C++ 自检原始结果见本地 [cpp-smoke.log](../outputs/cpp-boot-20261114-v1/cpp-smoke.log)。

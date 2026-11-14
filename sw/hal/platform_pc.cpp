@@ -89,9 +89,13 @@ void render(const game2048::Game& game) {
 uint32_t random_u32(void*) {
     // A supplied seed makes PC tests and later board replay reproducible.
     static uint32_t state = []() {
+#if defined(GAME2048_SEED) && GAME2048_SEED != 0
+        uint32_t value = static_cast<uint32_t>(GAME2048_SEED);
+#else
         const char* seed = std::getenv("GAME2048_SEED");
         uint32_t value = seed ? static_cast<uint32_t>(std::strtoul(seed, nullptr, 0))
                               : static_cast<uint32_t>(std::time(nullptr));
+#endif
         return value ? value : 1u;
     }();
     state ^= state << 13;
@@ -99,4 +103,6 @@ uint32_t random_u32(void*) {
     state ^= state << 5;
     return state;
 }
+
+void wait_for_start() {}
 } // namespace platform

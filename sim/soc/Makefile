@@ -24,6 +24,8 @@ SMOKE_SYMBOLS ?=
 INPUT_SYMBOLS ?=
 FRAMEBUFFER_SYMBOLS ?=
 FRAMEBUFFER_GOLDEN ?=
+GAME_SYMBOLS ?=
+GAME_GOLDEN ?=
 RUN_ARGS ?=
 
 RTL := $(ROOT)/soc/thinpad_top.v $(ROOT)/soc/soc_top.v \
@@ -64,6 +66,14 @@ endif
 prog: $(BUILD)/prog.hex
 
 boot-config:
+ifneq ($(strip $(GAME_SYMBOLS)),)
+	mkdir -p "$(BUILD)"
+	$(PYTHON) boot_symbols.py "$(GAME_SYMBOLS)" "$(BUILD)/game-symbols.hex" game
+ifneq ($(strip $(GAME_GOLDEN)),)
+	cp "$(GAME_GOLDEN)/game-expected.hex" "$(BUILD)/game-expected.hex"
+	cp "$(GAME_GOLDEN)/game-frame.hex" "$(BUILD)/game-frame.hex"
+endif
+endif
 ifneq ($(strip $(SMOKE_SYMBOLS)),)
 	mkdir -p "$(BUILD)"
 	$(PYTHON) boot_symbols.py "$(SMOKE_SYMBOLS)" "$(BUILD)/boot-symbols.hex"

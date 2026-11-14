@@ -4,13 +4,15 @@
 #include "../app/game.h"
 
 namespace platform {
-enum class Event { Up, Left, Down, Right, Restart, Quit, None };
+enum class Event { Up, Left, Down, Right, Restart, Quit, Pause, None };
 
 // Each backend implements these functions. Events represent single presses.
 Event read_event();
 void render(const game2048::Game& game);
 // Return pseudorandom bits; the core owns the tile placement rules.
 uint32_t random_u32(void* context);
+// Wait until KEY0 is active on the board. PC backend returns immediately.
+void wait_for_start();
 } // namespace platform
 
 #endif

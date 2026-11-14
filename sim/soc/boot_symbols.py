@@ -6,6 +6,7 @@ mode = sys.argv[3] if len(sys.argv) == 4 else "boot"
 name_sets = {
     "input": ("input_test_result", "input_test_checks", "_boot_halt"),
     "framebuffer": ("framebuffer_test_result", "framebuffer_test_checks", "_boot_halt"),
+    "game": ("game_snapshot",),
     "boot": ("__data_start", "__data_end", "__bss_start", "__bss_end",
              "smoke_result", "smoke_stack_checksum", "_boot_halt"),
 }

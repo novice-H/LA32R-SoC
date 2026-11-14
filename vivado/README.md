@@ -78,14 +78,11 @@ SRAM/视频等接口应结合器件与板级时序核对输入/输出约束，�
 
 ## 5. 生成完成后
 
-1. 打开 Vivado → Hardware Manager → Open Target → Auto Connect；
-2. Program Device 选 `thinpad_top.bit`；
-3. 按板级调试方案将固件加载到 BaseRAM（当前启动地址 `0x1C000000`），在加载期间管理 CPU 复位，加载后再释放复位。此流程仍待实现与实机验证。
-4. 加载并运行对应程序后检查板子行为：
-   - 数码管显示 STEP 的个位/十位，LED[4:0] 显示百位以上；
-   - 屏幕应显示程序写入的测试图案（当前启动程序只画了粉色一行 + 红色 4 像素）；
-   - `reset_btn`（BTN6）复位。
+1. 在远程实验平台的 FPGA 配置界面选择并下载 `thinpad_top.bit`；本项目使用远程实验平台，不需要本机 JTAG。
+2. 在平台提供的外部 SRAM 装载界面上传固件 `game.bin`。先执行 `source requirements/env.sh && make -C sw firmware`，生产固件默认位于 `${LA32R_BUILD:-$HOME/build/la32r}/sw/game/game.bin`。
+3. 固件链接入口与 CPU 复位取指物理地址为 BaseRAM `0x1C000000`，即 BaseRAM 相对偏移 0。按远程平台实际界面填写地址/偏移字段；字段语义和格式需在实际上传界面核对。保持 CPU 复位，完成 BIN 上传后按平台流程释放复位。
+4. 记录平台/板卡标识、bitstream、BIN 文件名与大小、上传地址字段和复位操作，并检查 VGA 游戏画面、四方向按键、KEY0 关闭清屏/清 LED/清旧事件、KEY0 重新开启新局及持续运行。此处作为验收清单；当前没有本轮远程上板结果。
 
-`sim/soc/prog/start.S` 是原汇编自检，`sw/tests/board_smoke.cpp` 是已通过整机仿真的最小 C++ 自检。后者已有 `crt0.S` 和链接脚本，执行 `source requirements/env.sh`、`make -C sw board-smoke` 可生成 `smoke.elf/.bin/.hex`；自检会显示步数 1234、品红一行及红色四像素。程序来源、初始化验证和构建细节见 [sw/README.md](../sw/README.md)。
+`sim/soc/prog/start.S` 是原汇编自检，`sw/tests/board_smoke.cpp` 是已通过整机仿真的最小 C++ 自检。执行 `source requirements/env.sh`、`make -C sw board-smoke` 可生成 `smoke.elf/.bin/.hex`；自检会显示步数 1234、品红一行及红色四像素。完整手动游戏使用 `make -C sw firmware` 构建 `game.bin`；`game-soc-test` 固定 seed123 CPU 回放、输入生命周期、后台缓冲监控及完整 VGA 比较均通过，`game-live-test` 生产镜像测试也通过。数字字模常量修正后，最终 BIN 对应首局全帧及生产镜像 live 复测状态由交付 manifest 记录。程序来源、初始化验证和构建细节见 [sw/README.md](../sw/README.md)。
 
-仿真通过 `$readmemh` 预装 BaseRAM；当前 Tcl 生成 bitstream 时未配置把软件初始化到板外 SRAM。实机需先完成并记录外部 SRAM 软件加载及复位流程，`smoke.bin` 的加载地址为 `0x1C000000`。验证最小自检后，再加载后续完整游戏固件。bitstream 下载和软件镜像加载分别验收。
+仿真通过 `$readmemh` 预装 BaseRAM；bitstream 不包含板外 SRAM 中的程序镜像。远程实验平台分别下载 bitstream 和上传 SRAM 镜像：完整游戏上传文件为生产目录的 `game.bin`，BaseRAM 物理入口为 `0x1C000000`。UART 与 Flash 未接入该加载流程。远程验收记录平台 UI 地址字段、上传文件标识、复位启动结果、VGA、按键与 KEY0 开关行为；远程实机运行待上传验收。

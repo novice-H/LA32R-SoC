@@ -153,7 +153,22 @@ make -C sw board-smoke-wave
 
 当前团队分发 LA32 v2.0（2023-09-03 / GCC 8.3.0），通过 `source requirements/env.sh` 加载。现有自检使用显式 `bne $r8, $r0, label`。旧 README 记录过旧工具链 `bnez` 编码兼容问题，当前测试覆盖的是该自检程序实际使用的指令序列。
 
-测试台时钟为 100 MHz、按周期检查功能；硬件设计及 XDC 使用 50 MHz。测试台按键/拨码输入固定 0，ExtRAM 初始填零。完整回归采集 480000 个有效像素并抽查 5 个位置。波形短运行目标跳过整帧。CPU 主动读取按键、执行 FB_CTRL 翻页以及 C++ 游戏固件均需后续测试。
+测试台时钟为 100 MHz、按周期检查功能；硬件设计及 XDC 使用 50 MHz。既有基础自检输入/拨码固定 0，ExtRAM 初始填零。游戏专用目标由 `game-soc-test` 驱动 CPU 执行固定种子固件；四方向、长按、KEY0 生命周期、旧事件清理、后台缓冲/VSYNC 监控及完整 VGA 比较均通过。生产镜像另由 `game-live-test` 检查并通过。
+
+### 2048 完整游戏 CPU 整机回放
+
+在仓库根目录执行（WSL bash）：
+
+```bash
+source requirements/env.sh
+make -C sw game-soc-test
+```
+
+该目标在独立 `${LA32R_BUILD:-$HOME/build/la32r}/sw/game-test/` 构建 `GAME_SEED=123` 的完整游戏固件。完整序列返回 `RESULT: PASS` / `SOC_SIM: PASS`：初始 serial=1，Up/Left/Down/Right 到 serial=5；Up 长按只新增 serial=6；KEY0 关闭后 active=0；standby 状态的 Right 被清除，KEY0 重开后 serial=7；KEY=3（KEY0/KEY1 均为 1）时手动 AI=0。每次 20 个 CPU 状态字段快照均匹配 host。后台缓冲写入与 VSYNC flip 监控通过，VGA 完整 480000 像素比较 `different_pixels=0`。Golden 序列为普通游戏，won/over 保持 false；胜利与死局规则由 host `game_test` 覆盖。仿真时长约 1 s，wall time 721.498 s。该完整序列固件与数字字模修正版仅标题 5×7 数字表的 30 B 不同，其余镜像字节完全相同。修正后的 `make -C sw GAME_RUN_ARGS=+game-image-test game-soc-test` 返回 `RESULT: PASS` / `SOC_SIM: PASS`，仿真 172 ms、wall time 111.236 s，VGA 480000 像素 `different_pixels=0`，目视确认标题“2048”和完整棋盘正常。
+
+最终生产镜像 `game-live-test` 验收通过：CPU 启动、初始 2 tiles 与 Left 后 3 tiles/moves=1/score=0，`RESULT: PASS`；仿真时间 332 ms，wall time 220.768 s。两个 Makefile 入口默认分别在 `BUILD/game-live/soc`、`BUILD/game-test/soc` runtime 目录构建模型；本轮运行复用了同一个已编译 Verilator 模型，运行目录保持分开。生产 ELF entry=`0x1C000000`，`.data` LMA=`0x1C001B9C`、VMA=`0x1C002000`、大小 12 B，BSS 96 B，stack 16 KiB。最终生产 BIN 为 7080 B，SHA256 `c81c4d1df53d7da12d9015cd5b42b55aa90776740246e8cf61027a2afac4928e`。文件哈希与 baseline/final test 关系见交付 manifest。
+
+仿真通过 HEX 预装 SRAM 模型，远程实验平台实机加载则上传 BIN 并按平台流程管理复位。完整构建和装载说明见 [sw/README.md](../../sw/README.md#完整游戏固件与整机回放) 和 [Vivado/远程平台说明](../../vivado/README.md)。UART 与 Flash 未用于当前固件装载。
 
 ## 判定标准
 
@@ -164,11 +179,11 @@ make -C sw board-smoke-wave
 
 ## 后续
 
-2026-11-14 本次复验：LA32 v2.0 工具链、Verilator 5.032，`RESULT: PASS` / `SOC_SIM: PASS`。程序 8132 拍完成，LED/数码管、480000 像素采集及 5 个抽查像素通过。编译存在既有位宽警告，默认构建使用 `-Wno-fatal`；独立 `lint`、综合及时序验收分别执行。本次日志在 WSL `/home/caohw/build/la32r/soc-review-20261114/log.txt`。
+2026-11-14 本次复验：LA32 v2.0 工具链、Verilator 5.032，`RESULT: PASS` / `SOC_SIM: PASS`。程序 8132 拍完成，LED/数码管、480000 像素采集及 5 个抽查像素通过。编译存在既有位宽警告，默认构建使用 `-Wno-fatal`；RTL 独立 lint 通过（沿用已有 waivers），综合及时序验收另行执行。日志位于 `${LA32R_BUILD:-$HOME/build/la32r}/soc-review-20261114/log.txt`。
 
 1. 已完成最小 C++ 启动层和 data/BSS/栈自检；后续程序沿用已验证的入口和内存布局。
-2. 输入及显示驱动已通过 CPU 测试；下一步接入 LA32R 平台后端并用完整游戏镜像回归。
-3. 接入现有 2048 核心，固定种子回放并完成板级 SRAM 加载/复位/显示验收。
+2. 输入及显示驱动、LA32R 平台后端与完整游戏构建入口均通过仿真验收；生产镜像 live 测试和 seed123 CPU 回放全场景通过。
+3. 远程实验平台上传生产 `game.bin`，核对 BaseRAM 地址和复位流程，完成 VGA、方向键、KEY0 生命周期及持续运行实机验收。
 
 ## 冒烟程序 v1 / v2
 
