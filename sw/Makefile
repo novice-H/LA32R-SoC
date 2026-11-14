@@ -4,6 +4,7 @@ BUILD ?= $(if $(LA32R_BUILD),$(LA32R_BUILD)/sw,$(HOME)/build/la32r/sw)
 CXXFLAGS ?= -std=c++11 -O2 -Wall -Wextra -Werror -pedantic
 CORE := app/game.cpp
 AI_CORE := app/ai.cpp
+AI_MODE_CORE := app/ai_mode.cpp
 HEADERS := app/game.h hal/platform.h
 LA32R_BUILD_DIR := $(BUILD)/la32r
 LA32R_FLAGS := $(CXXFLAGS) -march=loongarch32r -mabi=ilp32s -ffreestanding -fno-exceptions -fno-rtti -fno-pic -fno-pie -fno-stack-protector
@@ -12,7 +13,7 @@ SMOKE_FLAGS := $(LA32R_FLAGS) -fno-unwind-tables -fno-asynchronous-unwind-tables
 INPUT_DIR := $(BUILD)/input-soc
 FRAMEBUFFER_DIR := $(BUILD)/framebuffer-soc
 
-.PHONY: all play test cross-check cross-artifacts board-smoke board-smoke-test board-smoke-wave input-soc input-soc-test framebuffer-test framebuffer-soc framebuffer-soc-test
+.PHONY: all play test cross-check ai-mode-test cross-artifacts board-smoke board-smoke-test board-smoke-wave input-soc input-soc-test framebuffer-test framebuffer-soc framebuffer-soc-test
 all: $(BUILD)/2048
 
 $(BUILD):
@@ -37,6 +38,13 @@ $(BUILD)/ai_test: $(AI_CORE) tests/ai_test.cpp app/ai.h | $(BUILD)
 
 ai-test: $(BUILD)/ai_test
 	"$(BUILD)/ai_test"
+
+$(BUILD)/ai_mode_test: $(AI_MODE_CORE) $(AI_CORE) $(CORE) tests/ai_mode_test.cpp \
+		app/ai_mode.h app/ai.h app/game.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) $(AI_MODE_CORE) $(AI_CORE) $(CORE) tests/ai_mode_test.cpp -o "$@"
+
+ai-mode-test: $(BUILD)/ai_mode_test
+	"$(BUILD)/ai_mode_test"
 
 cross-check: | $(BUILD)
 	$(CROSS)g++ $(CXXFLAGS) -ffreestanding -fno-exceptions -fno-rtti -c $(CORE) -o "$(BUILD)/game.la32r.o"
