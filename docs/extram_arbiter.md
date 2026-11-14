@@ -1,35 +1,61 @@
-# ExtRAM 地址仲裁器
+# ExtRAM 仲裁器（`soc/mem/ext_ram_arbiter.v`）
 
-`soc/extram_arbiter.v` 将 LA32R CPU 的自定义主机接口和 VGA/DVI 的读接口接到同一片 32 位 ExtRAM。
+> 本文按**仓库当前采用**的实现编写。
+> `origin/extram-arbiter` 分支上的单模块版本（`soc/extram_arbiter.v`）接口与本实现不兼容，
+> 已由本方案取代；该分支可删除。
 
-## 接口约定
+## 结构
 
-CPU 使用 `cpu_addr/cpu_wdata/cpu_wstrb/cpu_req/cpu_we` 发起单字读写。`cpu_addr` 是字节地址，模块将 `0xA000_0000` 转换为 ExtRAM 字地址：
-
-```text
-ext_word_addr = (cpu_addr - 0xA000_0000) >> 2
+```
+CPU 请求（简单总线，字地址）──┐
+                             ├── ext_ram_arbiter ── ext_ram_ctrl ── 异步 SRAM 引脚
+VGA / DVI 读请求（2 拍延迟）──┘
 ```
 
-VGA 使用 `vga_addr/vga_req` 发起读请求，`vga_rdata` 在请求后一拍更新，`vga_rvalid` 同时拉高一拍。当前 `soc/vga_fb.v` 的请求会在每四个有效像素时出现一次，因此仲裁器保证 VGA 单拍请求被接收。
+- `ext_ram_arbiter`：只做仲裁与响应路由；
+- `ext_ram_ctrl`：异步 SRAM 控制器（`soc/mem/sram_ctrl.v` 的封装），50 MHz 下 1 拍访问、
+  2 拍返回（发地址 → 访问窗口 → 响应）。
+
+## 接口
+
+| 侧 | 信号 | 说明 |
+| --- | --- | --- |
+| DVI | `dvi_req` | 单拍读请求 |
+| | `dvi_next` | **提前一拍**预告 `dvi_req`，给仲裁器挡 CPU 用 |
+| | `dvi_addr[19:0]` | ExtRAM **字地址** |
+| | `dvi_ready` | 当拍授予（DVI 请求零等待） |
+| | `dvi_rdata[31:0]` / `dvi_rsp_valid` | 请求后 2 拍返回；数据保持到下一次响应 |
+| CPU | `cpu_req/cpu_ready` | 单拍握手；未授予时保持 `req` |
+| | `cpu_addr[19:0]` | ExtRAM **字地址**（字节地址由总线译码器转换） |
+| | `cpu_we/cpu_be_n/cpu_wdata` | 写控制，`be_n` 低有效 |
+| | `cpu_rsp_valid/cpu_rsp_rdata` | 请求后 2 拍返回（读给数据，写给完成脉冲） |
+| 控制器 | `mem_*` | 与 `ext_ram_ctrl` 直连 |
 
 ## 仲裁规则
 
-仲裁器只有一个 ExtRAM 活动事务。空闲时优先接受 VGA 请求；CPU 请求在没有 VGA 请求时接受。CPU 事务完成的同一拍可以直接接收新的 VGA 请求，所以连续视频读取不会出现额外空拍。CPU 请求保持到 `cpu_ack`，仲裁器用内部锁存位防止同一请求被重复接受。
-
-## ExtRAM 控制信号
-
-- `ext_ram_ce_n`：有事务时拉低。
-- `ext_ram_oe_n`：读事务时拉低。
-- `ext_ram_we_n`：CPU 写事务时拉低。
-- `ext_ram_be_n`：低有效，写周期使用 `~cpu_wstrb`。
-- `ext_ram_data`：只在 CPU 写周期驱动，读周期保持高阻。
+1. **DVI 绝对优先**：`dvi_req` 当拍即授予，保证数据正好落在像素组开头；
+2. **提前一拍挡 CPU**：`dvi_next` 为 1 的拍以及 `dvi_req` 拍都不授予 CPU，
+   否则 CPU 事务会把控制器占住、导致 DVI 晚一拍；
+3. **CPU 带宽**：每 4 个像素最多拿到 1 个空闲拍（约 25%）；未授予时 CPU 保持 `req` 即可；
+4. **数据保持**：`dvi_rdata` 在响应当拍透传、其余时刻保持，CPU 响应插在像素组中间
+   也不会改写正在扫描的字；
+5. 同一时刻只有一个在途事务；响应按顺序回到对应主机。
 
 ## 仿真
 
 ```bash
-iverilog -g2012 -s tb_extram_arbiter -o build/extram_arbiter.vvp \
-    soc/extram_arbiter.v sim/tb_extram_arbiter.v
-vvp build/extram_arbiter.vvp
+# 集成验证（真实链路 + CPU 噪声争用 + VGA 采帧）
+make -C sim/vga flip DUT="vga/dut_vga_fb.v ../soc/vga_fb.v"
+
+# 仲裁器单元测试（CPU 读写 / 字节使能 / DVI 优先级、零丢弃、2 拍响应）
+make -C sim/mem arb
 ```
 
-仿真覆盖 CPU 全字写读、VGA 与 CPU 同拍请求时 VGA 优先，以及字节使能部分写。
+实测指标：
+
+| 项 | 结果 |
+| --- | --- |
+| DVI 请求/响应 | 480001 / 480001（集成）、零丢弃、零延迟错误 |
+| CPU 争用读回 | 0 错误（约 70 万次授权） |
+| 单元测试 DVI | 零丢弃、2 拍响应、数据正确 |
+| 画面 | 两帧各 480000/480000 像素一致 |
