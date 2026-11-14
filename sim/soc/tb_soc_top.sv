@@ -63,7 +63,9 @@ module tb_soc_top;
     // 仿真观测：CPU 写回级 PC（thinpad_top 不引出，只能层次引用）
     assign dbg_wb_pc = dut.u_soc.dbg_wb_pc;
 
-`ifdef TB_V2
+`ifdef TB_AI
+    localparam BASE_INIT = "ai.hex";
+`elsif TB_V2
     localparam BASE_INIT = "prog_v2.hex";
 `else
     localparam BASE_INIT = "prog.hex";
@@ -98,6 +100,10 @@ module tb_soc_top;
     endtask
 
     integer timeout, n;
+    integer cyc = 0;
+    integer cyc0, cyc1;
+    reg [31:0] ai_nodes, ai_move;
+    always @(posedge clk) cyc = cyc + 1;
 
     initial begin
         $display("=== soc_top full-system testbench ===");
@@ -109,6 +115,56 @@ module tb_soc_top;
         repeat (20) @(posedge clk);
         reset_btn = 0;
 
+`ifdef TB_AI
+        // ---- AI 单步基准：STATUS[5] 开始，STATUS[13] 结束 ----
+        timeout = 0;
+        while (leds[5] !== 1'b1 && timeout < 2_000_000) begin
+            @(posedge clk);
+            timeout = timeout + 1;
+        end
+        if (leds[5] !== 1'b1) begin
+            $display("FAIL: 等开始标记超时，leds=%h", leds);
+            $finish;
+        end
+        $display("AI start @%0d cycles", cyc);
+        cyc0 = cyc;
+
+        timeout = 0;
+        while (leds[13] !== 1'b1 && timeout < 30_000_000) begin
+            @(posedge clk);
+            timeout = timeout + 1;
+        end
+        if (leds[13] !== 1'b1) begin
+            $display("FAIL: 搜索超时（%0d 拍），leds=%h", timeout, leds);
+            $finish;
+        end
+        cyc1 = cyc;
+
+        ai_nodes = u_base_ram.mem[20'hFFC00];
+        ai_move  = u_base_ram.mem[20'hFFC01];
+
+        $display("AI one-move: cycles=%0d nodes=%0d cycles/node=%0.1f move=%0d",
+                 cyc1 - cyc0, ai_nodes,
+                 ai_nodes ? (cyc1 - cyc0) * 1.0 / ai_nodes : 0.0,
+                 ai_move - 1);
+
+        if (ai_nodes == 0 || ai_nodes > 32'd10000) begin
+            $display("FAIL: 节点数异常 %0d", ai_nodes);
+            errors = errors + 1;
+        end
+        if (ai_move < 1 || ai_move > 4) begin
+            $display("FAIL: 走法异常 %0d", ai_move - 1);
+            errors = errors + 1;
+        end
+        if ((cyc1 - cyc0) < ai_nodes * 10 || (cyc1 - cyc0) > 50_000_000) begin
+            $display("FAIL: 周期数异常 %0d", cyc1 - cyc0);
+            errors = errors + 1;
+        end
+
+        if (errors == 0) $display("RESULT: PASS");
+        else             $display("RESULT: FAIL (%0d errors)", errors);
+        $finish;
+`else
         // 等程序写完 STATUS[13]
         timeout = 0;
         while (leds[13] !== 1'b1 && timeout < 8_000_000) begin
@@ -183,6 +239,7 @@ module tb_soc_top;
         if (errors == 0) $display("RESULT: PASS");
         else             $display("RESULT: FAIL (%0d errors)", errors);
         $finish;
+`endif
     end
 
 endmodule

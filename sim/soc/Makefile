@@ -57,6 +57,44 @@ $(BUILD)/prog_v2.hex: $(BUILD)/start_v2.bin bin2hex.py
 prog: $(BUILD)/prog.hex
 prog2: $(BUILD)/prog_v2.hex
 
+# ---------------------------------------------------------------- AI 单步基准
+AI_OBJS := $(BUILD)/ai_crt0.o $(BUILD)/ai_core.o $(BUILD)/ai_bench.o $(BUILD)/ai_mem.o
+AI_CXXFLAGS := -std=c++11 -O2 -ffreestanding -fno-exceptions -fno-rtti \
+               -fno-builtin -fno-threadsafe-statics -Wall -Wextra
+
+$(BUILD)/ai_crt0.o: $(ROOT)/sw/boot/crt0.S
+	$(CROSS)gcc -c $< -o $@
+
+$(BUILD)/ai_core.o: $(ROOT)/sw/app/ai.cpp $(ROOT)/sw/app/ai.h
+	$(CROSS)g++ $(AI_CXXFLAGS) -c $< -o $@
+
+$(BUILD)/ai_bench.o: $(ROOT)/sw/tests/ai_bench_la32r.cpp $(ROOT)/sw/app/ai.h
+	$(CROSS)g++ $(AI_CXXFLAGS) -c $< -o $@
+
+$(BUILD)/ai_mem.o: $(ROOT)/sw/libc/memory.cpp
+	$(CROSS)g++ $(AI_CXXFLAGS) -c $< -o $@
+
+$(BUILD)/ai.elf: $(AI_OBJS) $(ROOT)/sw/boot/link.ld
+	$(CROSS)g++ -nostdlib -nostartfiles -T $(ROOT)/sw/boot/link.ld \
+	    $(AI_OBJS) -lgcc -o $@
+
+$(BUILD)/ai.bin: $(BUILD)/ai.elf
+	$(CROSS)objcopy -O binary $< $@
+
+$(BUILD)/ai.hex: $(BUILD)/ai.bin bin2hex.py
+	$(PYTHON) bin2hex.py $< $@
+
+prog-ai: $(BUILD)/ai.hex
+
+sim-ai: prog-ai
+	mkdir -p $(BUILD)/obj_ai
+	$(VERILATOR) $(VFLAGS) -DTB_AI $(HERE)/tb_soc_top.sv $(RTL) \
+	    --Mdir $(BUILD)/obj_ai -o VtbAi
+
+run-ai: sim-ai
+	cd $(BUILD) && ./obj_ai/VtbAi | tee log_ai.txt
+	@grep -q "RESULT: PASS" $(BUILD)/log_ai.txt && echo "SOC_AI_SIM: PASS" || (echo "SOC_AI_SIM: FAIL"; exit 1)
+
 # ---------------------------------------------------------------- 仿真
 lint: prog
 	$(VERILATOR) --lint-only -Wall --timing -DSIMU -Wno-DECLFILENAME -Wno-UNUSEDSIGNAL \
@@ -90,4 +128,4 @@ wave: prog
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all prog prog2 lint sim run sim-v2 run-v2 wave clean
+.PHONY: all prog prog2 lint sim run sim-v2 run-v2 wave prog-ai sim-ai run-ai clean
