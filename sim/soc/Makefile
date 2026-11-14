@@ -20,7 +20,7 @@ endif
 VERILATOR ?= verilator
 PYTHON    ?= python3
 
-RTL := $(ROOT)/soc/soc_top.v \
+RTL := $(ROOT)/soc/thinpad_top.v $(ROOT)/soc/soc_top.v \
        $(ROOT)/soc/bus/soc_bus.v $(ROOT)/soc/bus/axi_slave_ref.v \
        $(ROOT)/soc/mem/sram_ctrl.v $(ROOT)/soc/mem/base_ram_ctrl.v \
        $(ROOT)/soc/mem/ext_ram_ctrl.v $(ROOT)/soc/mem/ext_ram_arbiter.v \
@@ -49,7 +49,7 @@ prog: $(BUILD)/prog.hex
 # ---------------------------------------------------------------- 仿真
 lint: prog
 	$(VERILATOR) --lint-only -Wall --timing -DSIMU -Wno-DECLFILENAME -Wno-UNUSEDSIGNAL \
-	    -Wno-WIDTHEXPAND -Wno-WIDTHTRUNC -Wno-EOFNEWLINE -Wno-PINCONNECTEMPTY -Wno-UNUSEDPARAM -Wno-UNDRIVEN -Wno-BLKSEQ +incdir+$(CPU) --top-module tb_soc_top \
+	    -Wno-WIDTHEXPAND -Wno-WIDTHTRUNC -Wno-EOFNEWLINE -Wno-PINCONNECTEMPTY -Wno-UNUSEDPARAM -Wno-UNDRIVEN -Wno-BLKSEQ -Wno-UNUSEDSIGNAL +incdir+$(CPU) --top-module tb_soc_top \
 	    $(HERE)/tb_soc_top.sv $(RTL)
 
 sim: prog

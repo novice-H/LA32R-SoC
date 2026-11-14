@@ -32,21 +32,36 @@ module tb_soc_top;
     wire [7:0]  dpy0, dpy1;
     wire [31:0] dbg_wb_pc;
 
-    soc_top dut (
-        .clk_50M(clk), .reset_btn(reset_btn),
+    thinpad_top dut (
+        .clk_50M(clk),
+        .clk_11M0592(1'b0),
+        .clock_btn(1'b0),
+        .reset_btn(reset_btn),
+
+        .touch_btn(4'd0),
+        .dip_sw(32'd0),
+        .leds(leds), .dpy0(dpy0), .dpy1(dpy1),
+
         .base_ram_data(base_ram_data), .base_ram_addr(base_ram_addr),
         .base_ram_be_n(base_ram_be_n), .base_ram_ce_n(base_ram_ce_n),
         .base_ram_oe_n(base_ram_oe_n), .base_ram_we_n(base_ram_we_n),
+
         .ext_ram_data(ext_ram_data), .ext_ram_addr(ext_ram_addr),
         .ext_ram_be_n(ext_ram_be_n), .ext_ram_ce_n(ext_ram_ce_n),
         .ext_ram_oe_n(ext_ram_oe_n), .ext_ram_we_n(ext_ram_we_n),
+
+        .txd(), .rxd(1'b0),
+
+        .flash_a(), .flash_d(), .flash_rp_n(), .flash_vpen(),
+        .flash_ce_n(), .flash_oe_n(), .flash_we_n(), .flash_byte_n(),
+
         .video_red(video_red), .video_green(video_green), .video_blue(video_blue),
         .video_hsync(video_hsync), .video_vsync(video_vsync),
-        .video_clk(video_clk), .video_de(video_de),
-        .touch_btn(4'd0), .dip_sw(32'd0),
-        .leds(leds), .dpy0(dpy0), .dpy1(dpy1),
-        .dbg_wb_pc(dbg_wb_pc)
+        .video_clk(video_clk), .video_de(video_de)
     );
+
+    // 仿真观测：CPU 写回级 PC（thinpad_top 不引出，只能层次引用）
+    assign dbg_wb_pc = dut.u_soc.dbg_wb_pc;
 
     async_sram_model #(
         .WORDS(1 << 20), .LOAD_INIT(1'b1), .INIT_FILE("prog.hex"), .FILL_WORD(32'd0)

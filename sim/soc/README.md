@@ -7,7 +7,11 @@ make        # 编译启动程序 + 编译 Verilator 模型 + 运行
 make prog   # 只编译启动程序（build/soc/prog.hex）
 make lint   # Verilator -Wall
 make clean
+make wave   # 生成 build/soc/soc.vcd（程序跑完即停，不采整帧）
 ```
+
+波形用 `gtkwave build/soc/soc.vcd` 打开：可看 CPU 的 AXI 读写握手、总线 2 拍应答、
+两片 SRAM 的 CE/OE/WE、VGA 的 de/hsync/vsync 与 RGB。
 
 一次运行约 20 秒编译 + 1 秒仿真，最终打印 `RESULT: PASS`。
 
@@ -27,7 +31,13 @@ soc/bus/soc_bus.v          ← 地址译码 + 固定 2 拍应答
 vga_fb ──DVI──► ext_ram_arbiter（DVI 优先，CPU 每 4 像素最多 1 拍）
 ```
 
-顶层层级：`soc/soc_top.v`（板级引脚命名与 `thinpad_top.v` 一致）。
+顶层层级：
+
+```
+soc/thinpad_top.v   板级顶层：完整 thinpad 引脚，未用外设（串口/Flash/备用时钟）安全关闭
+  └── soc/soc_top.v  SoC 核心：CPU + 桥 + 总线 + 存储器 + VGA + confreg
+sim/soc/tb_soc_top.sv 直接例化 thinpad_top，RAM 模型接 board 引脚
+```
 
 ## 地址映射
 
