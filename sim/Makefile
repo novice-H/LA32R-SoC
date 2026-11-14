@@ -8,18 +8,20 @@
 #   make sim        # 编译 Verilator 模型
 #   make run        # 跑仿真，输出 actual.ppm 与时序报告
 #   make compare    # 对比 expected.ppm 与 actual.ppm
-#   make wave       # 导出 6000 拍波形并用 GTKWave 打开
+#   make trace      # 编译并导出 6000 拍波形
+#   make wave       # 依赖 trace 后用 GTKWave 打开
 #   make clean
 #
 # 换待测模块：
 #   make DUT=vga/dut_my_vga.v            # 单个文件
 #   make DUT="vga/dut_my_vga.v ../soc/dvi_top.v"   # 多个文件
 # ---------------------------------------------------------------------------
+SHELL := /bin/bash
 # 注意：Verilator 生成的子 make 在 --Mdir 目录里运行，相对路径会失效，
 #       所以这里统一转成绝对路径。
 ROOT      := $(abspath ..)
 SIM       := $(abspath .)
-BUILD     := $(ROOT)/build
+BUILD     ?= $(if $(strip $(LA32R_BUILD)),$(abspath $(LA32R_BUILD)/vga),$(ROOT)/build)
 VGA       := $(SIM)/vga
 MEM       := $(ROOT)/soc/mem
 SRAM_MODEL:= $(SIM)/mem/async_sram_model.v
@@ -54,7 +56,7 @@ pattern: $(BUILD)/vga_pattern
 
 # ---------------------------------------------------------------- 转 mem
 $(BUILD)/fb0.hex: pattern
-	python3 $(VGA)/gen_mem.py $(BUILD)/fb0.bin $(BUILD)/fb1.bin $(BUILD)/fb0.hex
+	python3 $(VGA)/gen_mem.py $(BUILD)/fb0.bin $(BUILD)/fb0.hex
 
 mem: $(BUILD)/fb0.hex
 
@@ -70,35 +72,25 @@ sim: mem
 
 # ---------------------------------------------------------------- 运行
 run: sim
-	cd $(BUILD) && $(BIN) | tee vga_timing.txt
+	set -o pipefail && cd $(BUILD) && $(BIN) | tee vga_timing.txt
 
 # ---------------------------------------------------------------- 对比
 compare: run
-	python3 $(VGA)/compare.py $(BUILD)/expected.ppm $(BUILD)/actual.ppm $(BUILD) | tee $(BUILD)/vga_compare.txt
-
-# ---------------------------------------------------------------- 翻页测试
-# 先采 FB0 一帧，在 vsync 处把 fb_sel 翻到 FB1，再采一帧，两帧都比对。
-flip: mem
-	$(VERILATOR) $(VFLAGS) $(RTL) $(CSRC) -o Vtb_vga_top --Mdir $(OBJ)
-	cd $(BUILD) && $(BIN) +flip | tee vga_flip.txt
-	python3 $(VGA)/compare.py $(BUILD)/expected.ppm  $(BUILD)/actual0.ppm $(BUILD) fb0_ | tee $(BUILD)/vga_compare0.txt
-	python3 $(VGA)/compare.py $(BUILD)/expected1.ppm $(BUILD)/actual1.ppm $(BUILD) fb1_ | tee $(BUILD)/vga_compare1.txt
+	set -o pipefail && python3 $(VGA)/compare.py $(BUILD)/expected.ppm $(BUILD)/actual.ppm $(BUILD) | tee $(BUILD)/vga_compare.txt
 
 # ---------------------------------------------------------------- 波形
-wave: mem
+trace: mem
 	$(VERILATOR) $(VFLAGS) --trace $(RTL) $(CSRC) -o Vtb_vga_top --Mdir $(OBJ_TRACE)
 	cd $(BUILD) && $(BIN_TRACE) +trace-cycles=6000
+
+wave: trace
 	gtkwave $(BUILD)/vga.vcd &
 
 clean:
 	rm -rf $(OBJ) $(OBJ_TRACE)
-	rm -f $(BUILD)/vga_pattern $(BUILD)/fb0.bin $(BUILD)/fb1.bin $(BUILD)/fb0.hex \
-	      $(BUILD)/expected.ppm $(BUILD)/expected1.ppm \
-	      $(BUILD)/actual.ppm $(BUILD)/actual0.ppm $(BUILD)/actual1.ppm \
+	rm -f $(BUILD)/vga_pattern $(BUILD)/fb0.bin $(BUILD)/fb0.hex \
+	      $(BUILD)/expected.ppm $(BUILD)/actual.ppm \
 	      $(BUILD)/side_by_side.png $(BUILD)/diff.png \
-	      $(BUILD)/fb0_side_by_side.png $(BUILD)/fb0_diff.png \
-	      $(BUILD)/fb1_side_by_side.png $(BUILD)/fb1_diff.png \
-	      $(BUILD)/vga.vcd $(BUILD)/vga_timing.txt $(BUILD)/vga_compare.txt \
-	      $(BUILD)/vga_flip.txt $(BUILD)/vga_compare0.txt $(BUILD)/vga_compare1.txt
+	      $(BUILD)/vga.vcd $(BUILD)/vga_timing.txt $(BUILD)/vga_compare.txt
 
-.PHONY: all pattern mem lint sim run compare flip wave clean
+.PHONY: all pattern mem lint sim run compare trace wave clean

@@ -38,6 +38,11 @@
 
 ## 开发规范
 
+本地配置与协作内容的分类、目录规划和提交检查见 [本地与协作文件管理](docs/local-and-shared.md)。
+环境变量模板为 [env.example.sh](requirements/env.example.sh)，本机说明模板为
+[LOCAL.example.md](LOCAL.example.md)。环境安装和验证见 [requirements/README.md](requirements/README.md)。
+根目录 `LOCAL.md` 用于导航本机记录；详细环境实例保存在被忽略的 `requirements/local/README.md`。
+
 跨平台协作（Windows / WSL / Linux，PowerShell 7 / bash）的统一约定见 [**AGENTS.md**](AGENTS.md)：
 换行符 CRLF/LF、可执行位、文件编码、路径与文件名大小写、shell 语法对照、构建产物陷阱、
 提交前自检清单。改脚本或配置前先扫一眼，能省掉大部分"在我机器上是好的"。

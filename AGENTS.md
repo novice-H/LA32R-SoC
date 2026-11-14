@@ -74,7 +74,7 @@
 requirements/*.tar.gz          filter=lfs diff=lfs merge=lfs -text
 ```
 
-### `core.autocrlf` 三档（本机当前是 `true`）
+### `core.autocrlf` 三档
 
 | 取值 | 检出到工作区 | 提交时 | 说明 |
 | --- | --- | --- | --- |
@@ -127,8 +127,8 @@ git ls-files -s tools/build.sh               # 核对：100755 hash 0  path
 git ls-files -s | grep '^100644' | grep -E '\.(sh|ps1)$'   # 找出漏标的脚本
 ```
 
-**坑**：在 WSL 里对 `/mnt/f/...`（drvfs）执行 `chmod` 是**无效**的，别指望这样修权限；
-权限只能靠 git 索引里的 mode，或在 ext4 上操作。
+DrvFs 启用 `metadata` 后，`chmod` 可保存 Linux 权限；启用前按 Windows 访问权限推导显示值。
+Git 的可执行位通过索引管理；Linux 原生工具链和构建产物优先放 ext4。
 
 ---
 
@@ -138,7 +138,7 @@ git ls-files -s | grep '^100644' | grep -E '\.(sh|ps1)$'   # 找出漏标的脚�
 | --- | --- | --- |
 | 大小写不敏感 | Windows 上 `include "Top.v"` 能找到 `top.v`，Linux 报 `No such file` | 文件名、`include`、`` `include ``、Makefile 里的依赖全小写 |
 | 反斜杠 | bash 里 `\` 是转义符，`dir\file` 变成 `dirfile` | 脚本内一律 `/`；pwsh 传给原生工具也优先 `/` |
-| WSL 路径映射 | `F:\CursorProject\X` 与 `/mnt/f/CursorProject/X` 是同一份 | `wslpath -u 'F:\CursorProject\X'` / `wslpath -w /mnt/f/...` |
+| WSL 路径映射 | `D:\work\project` 与 `/mnt/d/work/project` 是同一份 | `wslpath -u 'D:\work\project'` / `wslpath -w /mnt/f/...` |
 | 空格路径 | `C:\Program Files\...` 被拆成两段 | pwsh 用 `& '...'`，bash 用引号 |
 | 非法字符 | Linux 上创作的文件名在 Windows 上 `git checkout` 直接失败 | 只用 `[A-Za-z0-9._-]`，禁用 `: * ? " < > \|` |
 | 保留名 | 名为 `CON`、`AUX`、`NUL` 的文件 Windows 建不出来 | 同上，靠命名规范规避 |
@@ -215,14 +215,9 @@ Get-ChildItem -Recurse -Include *.v,*.c,*.sh | ForEach-Object {
 
 ## 9. Git 配置与协作
 
-### 本机现状（Windows）
+### Windows 配置检查
 
-```
-core.autocrlf = true      # 工作区 CRLF；仓库仍是 LF（由 .gitattributes 保证）
-core.filemode = false     # 写不出可执行位
-core.symlinks = false     # 软链接降级为普通文件
-core.ignorecase = true    # 文件名大小写不敏感
-```
+先用 `git config --show-origin --get-regexp '^core\.'` 核对实际值；本机实测值记录在 `LOCAL.md`。
 
 建议 Windows 开发者执行（不影响他人、不改变仓库内容）：
 
@@ -273,36 +268,31 @@ git status --short
 
 ## 11. WSL 与 Windows 混用的注意事项
 
-1. **仓库放哪**：放 Windows 盘（`/mnt/f/...`）时 drvfs 不支持 Linux 权限位、
-   IO 慢 3–10 倍、`inotify` 不可靠（`make` / Verilator 的文件监视会失效）。
-   在 WSL 里做构建时，建议仓库放 `~/`（ext4），Windows 侧用 `\\wsl$\Ubuntu\home\...` 打开。
-2. **`chmod` 无效**：WSL 用 **DrvFs（9p 协议）** 挂载 Windows 盘到 `/mnt/x`，NTFS 没有 POSIX 权限位，
-   默认不启用 `metadata`，所以文件恒为 `0777`、`chmod` 无效、`core.filemode` 形同虚设。
-   **可以修**，见 11.2。
-3. **两侧同时 git**：同一仓库在 Windows 与 WSL 各跑一次 git 没问题，但
-   `core.filemode` / `core.autocrlf` 会因所在文件系统不同而被 git 自动改写，注意别把这类差异提交上去。
-4. **脚本执行**：WSL 里跑 `bash requirements/setup-deps.sh`；Windows 侧跑
-   `& 'C:\Program Files\PowerShell\7\pwsh.exe' -File xxx.ps1`。两套脚本各自维护，不互相调用。
-5. **换行**：用 Windows 编辑器改过 `requirements/*.sh` 后，务必确认仍是 LF
-   （`git diff` 里不应出现整文件重写）。
+1. 源码可保持在 Windows 盘，工具链和构建产物优先放发行版 ext4；性能差异取决于具体负载，以实测为准。
+2. DrvFs 的 Linux 权限行为取决于 `metadata`，启用方法见 11.2；已有文件可通过精确的 `chmod` 设置权限，归档部署可在空目标中解压保留归档权限。
+3. Windows 与 WSL 的 Git 操作应串行进行。`core.filemode`、`core.autocrlf` 等配置由用户或工具显式设置，共享同一 `.git/config` 时两侧均受影响。
+4. `.sh` 在 WSL/Linux 中用 bash 执行；`.ps1` 按第 1 节使用 PowerShell 7。
+5. 编辑 shell 脚本后确认 LF；构建路径可通过 `LA32R_BUILD` 导出并由 Makefile 使用。
 
----
+### 11.1 权限、文件监视与 GUI 的检查方法
 
-### 11.1 为什么 `/mnt` 上"很多功能无效"
+| 检查项 | 条件与做法 |
+| --- | --- |
+| 文件权限 | 查看 `findmnt -no OPTIONS /mnt/f`；在独立临时文件上依次 `chmod 600/755/644` 并用 `stat` 回读。启用 metadata 后复测。 |
+| 文件监视 | 分别测试 Linux 写入、Windows 写入与 ext4 写入。记录事件结果和运行环境；按实际监视需求选目录或轮询方式。 |
+| 大小写 | 检查实际目录行为，确保引用与文件名一致；团队使用约定的命名规则。 |
+| Linux 特殊文件与链接 | 根据具体工具需求在隔离目录实测；本仓库沿用第 4 节的文件分发约定。 |
+| GUI | 检查显示服务进程、socket 和实际应用加载。DISPLAY 变量与版本信息作为诊断线索。 |
 
-| 表现 | 根因 | 能否修 |
-| --- | --- | --- |
-| `chmod` 无效、`filemode` 判断错 | DrvFs 默认不保存 Linux 权限（未开 `metadata`） | ✅ 开 `metadata`（11.2） |
-| IO 慢 3–10 倍、`git status` / `make` 卡 | 每次文件操作走 9p RPC（`msize=65536`），无本地页缓存 | ❌ 只能把热数据放 ext4 |
-| `inotify` 监视不触发 | 9p 不透传 inotify 事件 | ❌ 同上（`make` 不靠它，IDE 热重载会失效） |
-| 文件名大小写跟随 NTFS | NTFS 不区分大小写 | ⚠️ 可设 `case=force`，但会让 Windows 侧混乱，不建议 |
-| 符号链接 / 硬链接异常 | DrvFs 对二者支持有限 | ❌ 别在 Windows 盘上建 |
+现象：依赖命令能输出版本，但实际图像处理或 GUI 加载仍可能失败。
 
-结论：`/mnt/x` 只适合**存放源码**，不适合放"需要 Linux 语义"的东西（权限、监视、高 IO 的构建目录）。
+规则：环境验收同时覆盖依赖导入、编译、仿真、波形读取与图像对比。
+
+做法：运行 `setup-deps.sh --check`、smoke/trace 和 VGA 环境示例；GTKWave 读取生成的 VCD 后确认显示初始化结果。WSLg 失败时先收集日志，再在相关工作已保存后重启 WSL 并复测。
 
 ### 11.2 开启 metadata 让权限生效
 
-在**发行版内部**（文件位于 VHDX，物理路径形如 `F:\WSL\<distro>`）编辑 `/etc/wsl.conf`：
+在**发行版内部**（文件位于 VHDX，物理位置由该发行版的安装或导入路径决定）编辑 `/etc/wsl.conf`：
 
 ```ini
 [automount]
@@ -313,7 +303,8 @@ options = "metadata,umask=22,fmask=11"
 然后在 **Windows 侧**重启该发行版（`wsl.conf` 按发行版生效，约 8 秒后配置才加载）：
 
 ```powershell
-wsl --terminate Ubuntu-26.04
+$Distro = Read-Host '输入发行版名称'
+wsl --terminate $Distro
 ```
 
 校验：`wsl -e bash -lc "findmnt -no OPTIONS /mnt/f | tr ',' '\n' | grep metadata"`。
@@ -338,32 +329,49 @@ wsl --terminate Ubuntu-26.04
 | shell 启动项 | `~/.bashrc` | 只写 `source .../requirements/env.sh` 这类引用 |
 | 构建产物（obj_dir 等） | `~/build/la32r/`（ext4） | 别放 `/mnt`，见 11.1 |
 
-以上除 `.wslconfig` 外**全部位于发行版内部**，物理上都在 `F:\WSL\<distro>` 的 VHDX 中，
-**不会落进工程目录**，也不会进 git。
+上述 Linux 配置默认位于发行版内部；实际 VHDX 位置、用户自定义路径与验证记录填写在 `LOCAL.md`。
 
 ---
 
-## 12. 协作文件 vs 本地个性化文件
+## 12. 协作文件与本地个性化文件
 
-原则：**对所有人成立的内容进仓库，只对你这台机器成立的内容留在本地。**
+现象：环境准备、日常开发和 FPGA 调试都会持续产生本机配置与运行产物；同类文件也可能包含团队需要的模板或基准。
 
-| 文件 / 模式 | 归属 | 说明 |
-| --- | --- | --- |
-| `README.md`、`AGENTS.md`、`docs/**` | 协作（提交） | 全体适用的流程与规范 |
-| `requirements/README.md`、`env.sh`、`setup-deps.sh` | 协作（提交） | 路径全部按脚本自身位置推导，不写死机器 |
-| `.gitattributes`、`.gitignore` | 协作（提交） | 跨平台行为的唯一权威来源 |
-| `LOCAL.example.md` | 协作（提交） | 本地备忘的**模板**，只放字段与用法 |
-| `LOCAL.md` | **本地（忽略）** | 你自己的版本、路径、代理、磁盘位置，**禁止提交** |
-| `*.local.*`（`requirements/env.local.sh`、`Makefile.local`、`*.local.v`） | **本地（忽略）** | 机器相关覆盖项，由 `env.sh` 按需 source |
-| `~/.config/la32r/env.sh` | **本地（仓库外）** | WSL/Linux 侧覆盖的**首选**位置，在发行版内部（VHDX 在 `F:\WSL`），不落工程目录 |
-| `.venv/`、`.vscode/`、`obj_dir/`、`*.vcd` | **本地（忽略）** | 工具链/IDE/仿真生成物 |
-| `requirements/loongarch32r-linux-gnusf*/` | **本地（忽略）** | 解压出来的工具链（压缩包本身走 LFS，必须提交） |
+规则：按用途和复现价值分类，贯穿项目全过程。团队约定、源码、依赖声明、可移植构建入口、配置模板及经审阅的测试基准进入 Git；机器路径、凭据、安装实例、缓存和普通运行结果保持本地。具体分类与目录规划见 [本地与协作文件管理](docs/local-and-shared.md)。
 
-### 规则
+| 对象 | 管理方式 |
+| --- | --- |
+| RTL、软件、testbench、接口/设计文档、可移植约束与构建脚本 | 协作；按原工程目录组织并审阅提交 |
+| 依赖声明、工具链版本/来源、LFS 分发归档、环境模板 | 协作；维护安装和验收方法 |
+| `LOCAL.example.md`、`requirements/env.example.sh` | 协作模板；只含占位值或可移植默认值 |
+| `LOCAL.md`、`requirements/local/`、`requirements/env.local.sh`、`Makefile.local`、`*.local.*` | 本地实例；忽略规则明确覆盖；环境脚本加载 local/env.sh 及旧版 env.local.sh，其他文件的加载由相应工具显式实现 |
+| `${XDG_CONFIG_HOME:-$HOME/.config}/la32r/env.sh` | 用户配置；之后加载 requirements/local/env.sh，最后加载旧版 requirements/env.local.sh |
+| `.venv/`、工具链展开目录、构建对象、VCD/FST、Vivado 运行目录 | 本地生成内容；共享其生成脚本、输入与必要版本信息 |
+| `outputs/`、`.codex/file-management/work/` | 本地交付与过程目录；经审阅的团队结论提升到 docs/ 或发布附件 |
+| 当前 `.vscode/` 与个人助手目录 | 本机使用；团队通用编辑器配置经审阅后单独制定；已约定的工具实例目录由 .gitignore 管理，额外个人规则使用 `.git/info/exclude` |
+| 黄金测试输入、回归预期、参考图、可重建 FPGA 工程输入 | 团队资产；确认目录与忽略规则匹配情况后纳入版本管理 |
 
-1. 新机器上手：`cp LOCAL.example.md LOCAL.md`（Windows 用 `Copy-Item`），填完再开始干活。
-2. 发现"这条规则只对我有效"时，**不要改** `README.md` / `AGENTS.md`，写进 `LOCAL.md`。
-3. 反过来，需要所有人生效的改动，**必须**进 `.gitattributes` / `.gitignore` / 脚本，不能只写在自己本地。
-4. 任何带**凭据、内网地址、个人绝对路径、机器名**的内容（token、代理口令、`C:\Users\你的名字\...`）
-   一律只写 `LOCAL.md` 或 `env.local.sh`。
-5. 提交前确认：`git check-ignore -v LOCAL.md` 有命中，`git status --short` 里不出现上面标"本地"的路径。
+做法：
+
+1. 按 `LOCAL.example.md` 创建本机说明，从 `requirements/env.example.sh` 配置用户环境；实际路径只填本地实例。代理凭据使用凭据管理器或受保护的本地机制。
+2. 全体开发者共用的排除规则写 `.gitignore`，个人且仅当前仓库使用的规则写 `.git/info/exclude`，跨仓库的个人规则使用用户 `core.excludesFile`。现有跟踪文件按版本管理流程审阅。
+3. 环境改动同步安装/检查脚本与模板；开发改动同步源码、测试、接口或设计文档。普通运行输出存放构建目录，有复现价值的结果附输入、版本与命令后再提升为团队资产。
+4. 提交前执行以下检查；新建测试基准与配置模板要同时确认其可跟踪性：
+
+```bash
+git check-ignore -v LOCAL.md requirements/local/env.sh Makefile.local requirements/env.local.sh
+git check-ignore -v requirements/env.example.sh
+python3 tools/check-local-isolation.py
+git diff --check
+git diff --cached --name-status
+```
+
+模板可跟踪；`check-ignore -v` 遇到 `!` 开头的匹配项表示已恢复可跟踪性。
+
+## 13. Codex 文件管理规则加载
+
+现象：环境检查与构建会产生本地过程文件。
+
+规则：开展非平凡文件工作前，先读取 `${CODEX_HOME}/file-management/POLICY.md`（未设置时使用用户主目录下的 `.codex/file-management/POLICY.md`），再读取本项目 `.codex/file-management/project.json`；沿用总规则的分类、保留和清理预览要求。
+
+做法：过程文件使用参数指定的过程根，最终交付进入 `outputs/`，源码保持原位置；清理依照已加载规则执行。

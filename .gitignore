@@ -8,7 +8,8 @@
 #       归竞赛主办方所有，仅限参赛队内部使用。
 # 这些文件只保留在本地用于查阅，不进版本库。
 # ============================================================
-*.pdf
+
+#*.pdf
 
 # ---------- 构建产物 ----------
 build/
@@ -51,12 +52,34 @@ Thumbs.db
 # 只忽略解压出来的工具链目录；压缩包本身走 Git LFS，必须能提交
 requirements/loongarch32r-linux-gnusf*/
 requirements/verilator-smoke/obj_dir/
+requirements/verilator-smoke/obj_dir_trace/
 requirements/verilator-smoke/*.vcd
+*.vcd
+*.fst
 
 # ---------- 本地个性化文件（每人一份，不上传） ----------
 # 本机环境备忘：由 LOCAL.example.md 复制为 LOCAL.md 后填写（模板在仓库里，实例不上传）
 LOCAL.md
 # 机器相关覆盖文件：requirements/env.local.sh、Makefile.local、*.local.v ...
 *.local.*
+Makefile.local
+# 克隆专属环境说明、配置实例与诊断记录
+/requirements/local/
+# 可审阅的环境模板属于协作内容
+!requirements/env.example.sh
+# 私有环境值；通用示例保持可跟踪
+.env
+.env.*
+!.env.example
+!.env.*.example
 # 本机自建 Python 虚拟环境
 .venv/
+
+
+# ---------- 本地任务记录与交付 ----------
+# outputs 中的结果经审阅后，可提升到 docs/、测试基准目录或发布附件
+/outputs/
+# 工具实例与本机文件管理状态
+/.codebuddy/
+/.codex/file-management/project.json
+/.codex/file-management/work/

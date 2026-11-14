@@ -3,15 +3,7 @@
 > 面向**从没装过开发环境的 Linux**。照着本文可以从零跑通：
 > 装系统依赖 → 配交叉工具链 → 编译 C → 生成 FPGA 镜像 → Verilator 仿真。
 
-本文所有命令均在以下环境实测通过：
-
-| 项目 | 实测值 |
-| --- | --- |
-| 系统 | Ubuntu 24.04.4 LTS (x86_64) |
-| 主机 GCC | 13.3.0 |
-| Verilator | 5.020 (2024-01-01) |
-| GTKWave | 3.3.116 |
-| 交叉工具链 | loongarch32r-linux-gnusf GCC 8.3.0（**LA32 v2.0 / 2023-09-03**，见 3.0 节） |
+本文记录团队依赖契约与通用操作。预编译交叉工具链要求 Linux x86_64 宿主；主机需提供 C/C++ 编译器、make、Python 3 与 Pillow、Git LFS、Verilator 5.0 或更高版本，以及查看波形所需的 GTKWave。各机器的发行版与实际工具版本记录在本机 `requirements/local/README.md`。
 
 > ### ⚠️ 版本变更：仓库里的工具链已换版（2026-11-11）
 >
@@ -53,6 +45,16 @@ source requirements/env.sh
 make -C requirements/verilator-smoke      # 应输出 q = 10
 ```
 
+在 WSL/Linux 上，可在本机配置 `~/.config/la32r/env.sh` 中导出 `LA32R_BUILD`，将 Verilator
+生成物与 VGA 仿真结果放到 ext4；`requirements/env.sh` 会加载该配置。未设置时，产物沿用各
+Makefile 的默认目录。示例：
+
+```bash
+export LA32R_BUILD="$HOME/build/la32r"
+make -C requirements/verilator-smoke       # 编译与运行位于 $LA32R_BUILD/smoke
+make -C sim                                # VGA 构建与结果位于 $LA32R_BUILD/vga
+```
+
 ---
 
 ## 2. 安装系统依赖
@@ -72,20 +74,23 @@ bash requirements/setup-deps.sh --check  # 只检查，不安装
 
 ```bash
 sudo apt update
-sudo apt install -y build-essential git git-lfs python3 ca-certificates verilator gtkwave
+sudo apt install -y build-essential git git-lfs python3 python3-pil ca-certificates verilator gtkwave
 ```
 
 **Fedora**
 
 ```bash
-sudo dnf install -y gcc gcc-c++ make git git-lfs python3 verilator gtkwave
+sudo dnf install -y gcc gcc-c++ make git git-lfs python3 python3-pillow verilator gtkwave
 ```
 
 **Arch**
 
 ```bash
-sudo pacman -S --needed base-devel git git-lfs python verilator gtkwave
+sudo pacman -S --needed base-devel git git-lfs python python-pillow verilator gtkwave
 ```
+
+VGA 图像对比依赖 Pillow：Debian/Ubuntu 使用 `python3-pil`，Fedora 使用 `python3-pillow`，
+Arch 使用 `python-pillow`，openSUSE 使用 `python3-Pillow`。一键脚本会安装并检查该模块。
 
 ### 2.3 检查版本
 
@@ -129,7 +134,7 @@ verilator --version
 | `build-essential` / `g++` / `make` | Verilator 把 Verilog 转换成 C++ 后需要主机编译器编译 |
 | `git` | 拉取仓库、拉取 Verilator 源码 |
 | `git-lfs` | 拉取存放在 LFS 里的交叉工具链压缩包 |
-| `python3` | 把 `.bin` 转成 32 位字 `.mem`（见 6.2 节） |
+| `python3` / Pillow | 把 `.bin` 转成 32 位字 `.mem`，并比较 VGA 图像（见 6.2 节） |
 | `verilator` | 把 SystemVerilog 编译为高速 C++ 仿真 |
 | `gtkwave` | 查看 VCD/FST 波形 |
 
@@ -280,15 +285,17 @@ echo 'source '"$PWD"'/requirements/env.sh' >> ~/.bashrc
 
 ### 4.3.1 本机专属覆盖（不进仓库）
 
-`env.sh` 在执行时会依次加载本机覆盖文件（存在才加载，加载后会打印 `已加载本机覆盖：…`）：
+`env.sh` 依次加载以下本机覆盖文件（存在才加载，加载后会打印 `已加载本机覆盖：…`）：
 
 | 顺序 | 路径 | 适用场景 |
 | --- | --- | --- |
-| 1 | `${XDG_CONFIG_HOME:-$HOME/.config}/la32r/env.sh` | **首选**：Linux/WSL 侧。文件在发行版内部（WSL 的 VHDX 通常在 `F:\WSL\...`），**不落进工程目录** |
-| 2 | `requirements/env.local.sh` | 兼容：想在工程内放本地覆盖时用（已被 `.gitignore` 的 `*.local.*` 忽略） |
+| 1 | `${XDG_CONFIG_HOME:-$HOME/.config}/la32r/env.sh` | 用户配置目录；WSL 默认位于发行版内 |
+| 2 | `requirements/local/env.sh` | 本机项目目录；整个 `requirements/local/` 被忽略 |
+| 3 | `requirements/env.local.sh` | 兼容旧路径；最后加载，优先级最高 |
 
-典型内容：指向自己的工具链副本、公司/学校代理、把编译产物放到 ext4 加速等。
-模板与字段说明见仓库根目录 `LOCAL.example.md`，规则见 `AGENTS.md` 第 12 节。
+日常选择其中一个位置维护配置，避免相同变量在多个文件重复设置。模板 [`env.example.sh`](env.example.sh) 不会自动加载；复制到所选位置后再编辑。工具链副本、代理和 ext4 构建路径等本机信息不写入共享文档。根目录 `LOCAL.md` 是本机导航，实际环境记录放在被忽略的 `requirements/local/README.md`。
+
+本机说明模板见 [`LOCAL.example.md`](../LOCAL.example.md)。完整分类、目录规划及日常开发流程见 [本地与协作文件管理](../docs/local-and-shared.md)，规则见 `AGENTS.md` 第 12 节。
 
 ### 4.4 校验清单
 
@@ -668,9 +675,11 @@ clean:
 requirements/
 ├── README.md                                # 本文件
 ├── env.sh                                   # source 后配置 PATH
+├── env.example.sh                            # 通用环境变量模板，不自动加载
 ├── setup-deps.sh                            # 安装/检查系统依赖
 ├── loongarch32r-linux-gnusf-2.0.tar.gz      # 交叉工具链（112 MB，存 Git LFS）
 ├── loongarch32r-linux-gnusf-2.0/            # 解压产物（305 MB，被 .gitignore 忽略）
+├── local/                                    # 本机环境记录与配置（整个目录被忽略）
 └── verilator-smoke/                         # Verilator 仿真模板
 ```
 
@@ -688,6 +697,7 @@ requirements/*.tar.gz  filter=lfs diff=lfs merge=lfs -text
 requirements/loongarch32r-linux-gnusf*/
 # Verilator 生成物
 requirements/verilator-smoke/obj_dir/
+requirements/verilator-smoke/obj_dir_trace/
 requirements/verilator-smoke/*.vcd
 ```
 

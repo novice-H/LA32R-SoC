@@ -7,9 +7,10 @@
 #   requirements/loongarch32r-linux-gnusf-*/loongson-gnu-toolchain-*/bin/...
 #
 # 本机个性化覆盖（都不进 git，见 AGENTS.md 第 12 节），会依次加载：
-#   ${XDG_CONFIG_HOME:-$HOME/.config}/la32r/env.sh   首选：放在发行版内部（WSL 的 VHDX 在 F:\WSL，
-#                                                    任何写入都不落在工程目录里）
-#   requirements/env.local.sh                        兼容：放在工程内的本地覆盖（已被 *.local.* 忽略）
+#   ${XDG_CONFIG_HOME:-$HOME/.config}/la32r/env.sh   首选：用户配置目录（WSL 默认位于发行版内）
+#   requirements/local/env.sh                       克隆专属配置（local 目录整体忽略）
+#   requirements/env.local.sh                       旧版兼容入口（已被 *.local.* 忽略）
+# 模板：requirements/env.example.sh；后加载的文件覆盖前者同名变量。
 
 _LA32_REQ_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _LA32_GCC=loongarch32r-linux-gnusf-gcc
@@ -26,7 +27,7 @@ for _cand in "$_LA32_REQ_DIR"/loongarch32r-linux-gnusf*/; do
 done
 _LA32_AUTO="$LA32_ROOT"
 
-for _ovr in "${XDG_CONFIG_HOME:-$HOME/.config}/la32r/env.sh" "$_LA32_REQ_DIR/env.local.sh"; do
+for _ovr in "${XDG_CONFIG_HOME:-$HOME/.config}/la32r/env.sh" "$_LA32_REQ_DIR/local/env.sh" "$_LA32_REQ_DIR/env.local.sh"; do
   if [ -f "$_ovr" ]; then
     . "$_ovr"
     echo "已加载本机覆盖：$_ovr" >&2

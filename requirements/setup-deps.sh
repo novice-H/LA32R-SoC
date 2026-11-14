@@ -15,6 +15,10 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # 定位工具链：兼容 requirements/loongarch32r-linux-gnusf-*/bin 与
 # requirements/loongarch32r-linux-gnusf-*/loongson-gnu-toolchain-*/bin 两种布局
 TOOLCHAIN=""
+if [ -n "${LA32_ROOT:-}" ] && [ -x "$LA32_ROOT/bin/loongarch32r-linux-gnusf-gcc" ]; then
+  TOOLCHAIN="$LA32_ROOT"
+fi
+if [ -z "$TOOLCHAIN" ]; then
 for cand in "$DIR"/loongarch32r-linux-gnusf*/; do
   [ -d "$cand" ] || continue
   for sub in "$cand" "$cand"*/; do
@@ -24,6 +28,7 @@ for cand in "$DIR"/loongarch32r-linux-gnusf*/; do
     fi
   done
 done
+fi
 OK=0
 FAIL=0
 
@@ -41,10 +46,10 @@ detect_pm() {
 install_deps() {
   local pm; pm="$(detect_pm)"
   case "$pm" in
-    apt-get) sudo apt-get update && sudo apt-get install -y build-essential git git-lfs python3 ca-certificates verilator gtkwave ;;
-    dnf)     sudo dnf install -y gcc gcc-c++ make git git-lfs python3 verilator gtkwave ;;
-    pacman)  sudo pacman -S --needed --noconfirm base-devel git git-lfs python verilator gtkwave ;;
-    zypper)  sudo zypper install -y gcc gcc-c++ make git git-lfs python3 verilator gtkwave ;;
+    apt-get) sudo apt-get update && sudo apt-get install -y build-essential git git-lfs python3 python3-pil ca-certificates verilator gtkwave ;;
+    dnf)     sudo dnf install -y gcc gcc-c++ make git git-lfs python3 python3-pillow verilator gtkwave ;;
+    pacman)  sudo pacman -S --needed --noconfirm base-devel git git-lfs python python-pillow verilator gtkwave ;;
+    zypper)  sudo zypper install -y gcc gcc-c++ make git git-lfs python3 python3-Pillow verilator gtkwave ;;
     *) say "未知包管理器，请手动安装：gcc g++ make git git-lfs python3 verilator gtkwave"; return 1 ;;
   esac
 }
@@ -73,6 +78,11 @@ check_cmd g++
 check_cmd make
 check_cmd git
 check_cmd python3
+if python3 -c 'from PIL import Image' >/dev/null 2>&1; then
+  pass "Pillow  $(python3 -c 'import PIL; print(PIL.__version__)')"
+else
+  fail "Pillow  （python3 无法导入 PIL.Image）"
+fi
 
 if command -v git-lfs >/dev/null 2>&1 || git lfs version >/dev/null 2>&1; then
   pass "git-lfs  $(git lfs version 2>/dev/null | head -1)"
