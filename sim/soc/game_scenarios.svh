@@ -144,8 +144,8 @@ task automatic run_game_scenarios;
         dip_sw = 3;
 
         game_press(4'h1, 2);
-        game_press(4'h2, 3);
-        game_press(4'h4, 4);
+        game_press(4'h4, 3);
+        game_press(4'h2, 4);
         game_press(4'h8, 5);
 
         serial_before = game_word(20);
@@ -240,7 +240,7 @@ task automatic run_game_live_scenarios;
         game_wait_serial(1);
         game_live_check(0);
 
-        touch_btn = 4'h2;
+        touch_btn = 4'h4;
         repeat (100) @(negedge clk);
         touch_btn = 0;
         game_wait_serial(2);

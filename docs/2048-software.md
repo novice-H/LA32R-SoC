@@ -105,7 +105,7 @@ AI 为选做功能，安排在基本输入、渲染和完整游戏镜像通过 S
 
 ### 已验证的输入驱动
 
-调用者持有 `input::State{}`，`clear()` 清除软件待处理位并读取 BTN 丢弃旧事件；`poll()` 在软件位为空时读取 BTN，然后按上、左、下、右顺序每次返回一项。`keys()` 返回 KEY 低两位电平。`input::Button` 的值是方向位掩码，后续板级平台通过显式映射转换为 `platform::Event`。
+调用者持有 `input::State{}`，`clear()` 清除软件待处理位并读取 BTN 丢弃旧事件；`poll()` 在软件位为空时读取 BTN，然后按上、左、下、右优先序（掩码 `1, 4, 2, 8`）每次返回一项。硬件映射为 BTN1/bit0=上、BTN2/bit1=下、BTN3/bit2=左、BTN4/bit3=右。`keys()` 返回 KEY 低两位电平。`input::Button` 的值是方向位掩码，后续板级平台通过显式映射转换为 `platform::Event`。
 
 原始测试见 [input_soc.cpp](../sw/tests/input_soc.cpp) 与 [input_scenarios.svh](../sim/soc/input_scenarios.svh)。测试台驱动真实板级 touch_btn/dip_sw，CPU 执行交叉编译的固件和驱动，通过 STEP/KEY 握手推进场景。12 场景覆盖四方向、长按、多键顺序、跨时刻不同方向累积、同方向事件合并、释放再按、软件/硬件 clear 和 KEY 电平，共 49 项固件检查；测试台另核对真实 BTN 读响应及次数。日志见本地 [input-soc.log](../outputs/input-soc-20261114-v1/input-soc.log)。C++ 启动及原汇编回归分别保持 7600 / 8132 拍通过。
 

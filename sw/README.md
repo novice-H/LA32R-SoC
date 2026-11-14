@@ -2,6 +2,10 @@
 
 提供 WSL/Linux 终端试玩、规则测试、LA32R 完整游戏固件和 CPU 整机仿真入口。达到 2048 或无合法移动时结束本局；PC 版以 R 重开、Q 或 Ctrl-C 退出。板级游戏由 KEY0 控制开局/结束，四方向按键移动，胜负后等待 KEY0 关闭再开启新局。每次有效移动增加一步，合并生成的数字计入分数。AI 为选做，当前手动固件忽略 KEY1。
 
+## 2026-11-14 按键映射交付更新
+
+本次远程面板映射为 BTN1/bit0=上、BTN2/bit1=下、BTN3/bit2=左、BTN4/bit3=右；软件多键消费优先序保持 Up、Left、Down、Right，对应掩码 `1, 4, 2, 8`。交付文件位于仓库根目录 `game2048_release/game.bin`（7080 B，SHA256 `a5cfb00baff35af86bacd50e74e1562cb056c965e33040b69e47724232177ac7`）及 `game2048_release/game_play.md`。本轮 CPU 输入整机测试 12 场景、49 项固件检查已通过；新生产镜像启动及 BTN3/Left 输入集成检查通过，`RESULT: PASS`，模拟时长 332 ms。本轮覆盖输入映射和新 BIN 启动/Left；全量游戏回放数据记录在下文的上一版归档中。
+
 ## sw 全部文件规划
 
 以下为手动游戏的软件文件规划。构建对象、汇编清单、ELF 和镜像存放在 WSL 构建目录。
@@ -109,13 +113,15 @@ make -C sw game-soc-test
 
 数字字模修正后重新运行了首局完整画面和生产镜像启动复核：`make -C sw GAME_RUN_ARGS=+game-image-test game-soc-test` 的 `RESULT: PASS` / `SOC_SIM: PASS`，仿真 172 ms、wall time 111.236 s，VGA 480000 像素 `different_pixels=0`；实帧目视确认标题“2048”和棋盘显示正常。`make -C sw game-live-test` 对最终 production `game.bin` 的 CPU 启动、初始 2 tiles、Left 后 3 tiles/`moves=1`/`score=0` 检查通过。`glyph-diff.json` 记录新旧 seed123 镜像仅标题 5×7 数字表 30 B 不同，其余字节（包括 text/data）完全一致。
 
-### 本轮整机仿真结果
+### 上一版历史归档：旧按键映射与全量回放
 
-最终生产镜像 `game-live-test` 完成 CPU 启动、初始 2 tiles 和 Left 后 3 tiles/`moves=1`/`score=0` 检查，结果 `RESULT: PASS`；仿真时间 332 ms，主机 wall time 220.768 s。两个 Makefile 入口分别使用 `BUILD/game-live/soc`、`BUILD/game-test/soc` runtime 目录，各自在对应目录构建模型；本轮实测为缩短回归时间，共享了同一份已编译 Verilator 模型，运行目录仍分开。最终生产 BIN 为 7080 B，SHA256 `c81c4d1df53d7da12d9015cd5b42b55aa90776740246e8cf61027a2afac4928e`。
+以下 `outputs/game2048-20261114-v1/` 测试、镜像和哈希记录属于上一版旧按键映射的历史归档，保留其原始数值供追溯；它们不代表本次新映射生产镜像的完整回放验证。
+
+上一版生产镜像 `game-live-test` 完成 CPU 启动、初始 2 tiles 和 Left 后 3 tiles/`moves=1`/`score=0` 检查，结果 `RESULT: PASS`；仿真时间 332 ms，主机 wall time 220.768 s。两个 Makefile 入口分别使用 `BUILD/game-live/soc`、`BUILD/game-test/soc` runtime 目录，各自在对应目录构建模型；当时为缩短回归时间，共享了同一份已编译 Verilator 模型，运行目录仍分开。上一版生产 BIN 为 7080 B，SHA256 `c81c4d1df53d7da12d9015cd5b42b55aa90776740246e8cf61027a2afac4928e`。
 
 固定 `GAME_SEED=123` 的完整序列返回 `RESULT: PASS` / `SOC_SIM: PASS`。序列覆盖初始 `serial=1`、Up/Left/Down/Right 到 `serial=5`、Up 长按（仅增加至 `serial=6`）、KEY0 关闭并清除 active、standby 状态 Right 被清除后 KEY0 重启新局至 `serial=7`，以及 KEY=3（KEY0/KEY1 均为 1）时手动模式 AI 保持 0。每次 20 个棋盘/状态字段快照均与 host 参考匹配；后台显存写入和 VSYNC 翻页监控通过；VGA 完整 480000 像素比较 `different_pixels=0`。Golden 使用普通游戏序列，`won=false`、`over=false`；胜负规则由 host `game_test` 覆盖。仿真时长约 1 s，wall time 721.498 s。新旧 seed123 固件差异仅为 30 B 标题数字字模数据；交付保留旧完整序列镜像 `replay/full-sequence-before-glyph.bin`，修正版本及 `glyph-diff.json` 随交付提供。
 
-本轮交付位于 `outputs/game2048-20261114-v1/`：根目录 `game.bin` 为生产硬件 RAND 固件（7080 B，SHA256 `c81c4d1df53d7da12d9015cd5b42b55aa90776740246e8cf61027a2afac4928e`），`replay/` 保存最终 seed123 固件（7016 B）、修正前完整序列镜像及回放文件，并包含最终 `game-actual.png`、`manifest.json`、`glyph-diff.json` 和 `logs/` 下的 `game-replay.log`、`game-production.log`、`framebuffer.log`、`input.log`、`boot.log`、`assembly.log`。最终 seed123 SHA256 为 `ec20a450e2fdc55c1a1aa6bbd097fd631ffb5816d4ba9e69c63dcacf95e67d72`；修正前完整序列镜像校验值列于 manifest。生产 ELF 的入口为 `0x1C000000`；`.data` LMA=`0x1C001B9C`、VMA=`0x1C002000`、大小 12 B，BSS 96 B，栈 16 KiB。远程实验平台上传根目录 `game.bin`。
+上一版归档位于 `outputs/game2048-20261114-v1/`：根目录 `game.bin` 为上一版生产硬件 RAND 固件（7080 B，SHA256 `c81c4d1df53d7da12d9015cd5b42b55aa90776740246e8cf61027a2afac4928e`），`replay/` 保存最终 seed123 固件（7016 B）、修正前完整序列镜像及回放文件，并包含最终 `game-actual.png`、`manifest.json`、`glyph-diff.json` 和 `logs/` 下的 `game-replay.log`、`game-production.log`、`framebuffer.log`、`input.log`、`boot.log`、`assembly.log`。上一版 seed123 SHA256 为 `ec20a450e2fdc55c1a1aa6bbd097fd631ffb5816d4ba9e69c63dcacf95e67d72`；修正前完整序列镜像校验值列于 manifest。生产 ELF 的入口为 `0x1C000000`；`.data` LMA=`0x1C001B9C`、VMA=`0x1C002000`、大小 12 B，BSS 96 B，栈 16 KiB。该归档中的生产 `game.bin` 不对应本次根目录交付。
 
 ### 远程实验平台装载与板级验收
 
@@ -151,7 +157,7 @@ const bool game_enabled = (switches & confreg::kGameEnable) != 0;
 const bool ai_enabled = (switches & confreg::kAiEnable) != 0;
 ```
 
-BTN 一次读取取得并清除硬件累积位；`poll` 将读取到的位保存在 `State::pending`，按 Up、Left、Down、Right 顺序每次交付一个方向。硬件每个方向只有一位，未读期间同方向的多次事件会合并。RTL 中若 BTN 读取与新按键 edge 落在同一时钟沿，读清赋值覆盖事件累积赋值，该 edge 会被清除。驱动采用 BTN 位掩码加调用者的软件 pending 状态，读取操作不形成原子快照队列。RTL 只在按键上升沿产生事件，因此长按期间首次报告后，后续轮询持续返回 `None`，直到新的按下沿到来。KEY 返回 `dip_sw[1:0]` 的当前电平。
+BTN 一次读取取得并清除硬件累积位；BTN1/bit0=Up、BTN2/bit1=Down、BTN3/bit2=Left、BTN4/bit3=Right。`poll` 将读取到的位保存在 `State::pending`，按 Up、Left、Down、Right 优先序（数值掩码 `1, 4, 2, 8`）每次交付一个方向。硬件每个方向只有一位，未读期间同方向的多次事件会合并。RTL 中若 BTN 读取与新按键 edge 落在同一时钟沿，读清赋值覆盖事件累积赋值，该 edge 会被清除。驱动采用 BTN 位掩码加调用者的软件 pending 状态，读取操作不形成原子快照队列。RTL 只在按键上升沿产生事件，因此长按期间首次报告后，后续轮询持续返回 `None`，直到新的按下沿到来。KEY 返回 `dip_sw[1:0]` 的当前电平。
 
 在 WSL 仓库根目录运行 RTL CPU 输入回归：
 
@@ -165,7 +171,7 @@ make -C sw input-soc-test
 | 场景 | 检查内容 |
 | --- | --- |
 | 1–4 | Up、Left、Down、Right 单方向事件；Up 持续按下时连续轮询不重复 |
-| 5 | 四键同时到达时按位序交付；独立 BTN 读清硬件后软件 pending 仍完整 |
+| 5 | 四键同时到达时按软件优先序交付；独立 BTN 读清硬件后软件 pending 仍完整 |
 | 6 | Up 与 Down 预先累积后均可交付 |
 | 7–8 | 两个未读 Up edge 合并为一位；释放后重新按下可再次报告 |
 | 9–10 | `clear` 分别清除软件 pending 和未读硬件事件 |

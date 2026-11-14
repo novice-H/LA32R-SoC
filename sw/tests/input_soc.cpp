@@ -111,7 +111,7 @@ int main() {
     expect_clean_state(4);
     finish(4);
 
-    // 5: Simultaneous buttons follow bit order; software pending survives a
+    // 5: Simultaneous buttons follow priority order; software pending survives a
     // separate read that clears the hardware register.
     begin(5);
     expect_button(input::poll(state), input::Button::Up);
