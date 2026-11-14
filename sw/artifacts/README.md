@@ -4,7 +4,12 @@
 
 | 文件 | 加载位置 | 说明 |
 | --- | --- | --- |
-| `game_baseram.bin` | BaseRAM 偏移 0（CPU 物理地址 `0x1C00_0000`） | 完整 2048 固件（手动 + AI 模式） |
+| `game_baseram.bin` | BaseRAM 偏移 0（CPU 物理地址 `0x1C00_0000`） | 完整 2048 固件，**未开 cache**（AI 约 1 s/步） |
+| `game_baseram_cache.bin` | 同上 | 同上，**开 I/D-Cache**（AI 约 0.28 s/步，推荐） |
+
+> cache 版本在 `main()` 里调用 `boot_enable_caches()`（DMW0 RAM 可缓存、DMW1
+> confreg/ExtRAM 别名不可缓存），帧缓冲已改走 `0xA000_0000` 别名，VGA 不会读到旧像素。
+> 若实机异常（黑屏/卡死），回退到 `game_baseram.bin`。
 
 ## ExtRAM
 
@@ -36,11 +41,21 @@ make -C sw firmware GAME_SEED=0
 cp build/sw/game/game.bin sw/artifacts/game_baseram.bin
 ```
 
-AI 模式想更快可在板级构建时开 cache（约 8 倍）：
+AI 模式想更快可开 cache（约 8 倍，AI 预算自动从 3000 提到 10000）：
 
 ```bash
 make -C sw firmware GAME_SEED=0 GAME_CACHE=1 GAME_DIR=build/sw/game-cache
 ```
+
+期望速度（50 MHz）：
+
+| 构建 | AI 预算 | 预计每步 |
+| --- | --- | --- |
+| 默认（无 cache） | 3000 | ~0.67 s |
+| `GAME_CACHE=1` | 10000 | **~0.28 s** |
+
+想更快可以把 `GAME_CACHE=1` 时的预算改小（`main.cpp` 里的 10000），
+例如 3000 节点约 0.08 s/步，但棋力会下降。
 
 > 注意：`GAME_CACHE=1` 的镜像只建议上板用；仿真测试依赖 BaseRAM 中的
 > `game_snapshot`，开 cache 后测试台会读到旧值。
