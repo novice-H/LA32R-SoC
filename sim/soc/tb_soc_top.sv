@@ -80,6 +80,11 @@ module tb_soc_top;
 
     initial begin
         $display("=== soc_top full-system testbench ===");
+        if ($test$plusargs("wave")) begin
+            $dumpfile("soc.vcd");
+            $dumpvars(1, tb_soc_top.dut);
+            $dumpvars(1, tb_soc_top);
+        end
         repeat (20) @(posedge clk);
         reset_btn = 0;
 
@@ -101,6 +106,13 @@ module tb_soc_top;
         check32({27'd0, leds[4:0]}, 32'd12, "STEP=1234 -> LED[4:0]");
         check32({24'd0, dpy1}, 32'hB6, "数码管十位 seg7(3)");
         check32({24'd0, dpy0}, 32'hD2, "数码管个位 seg7(4)");
+
+        // 波形模式：跑完程序就停，不采整帧
+        if ($test$plusargs("short")) begin
+            repeat (100) @(posedge clk);
+            $display("RESULT: PASS (wave run)");
+            $finish;
+        end
 
         // 采一整帧
         while (video_vsync === 1'b1) @(posedge clk);

@@ -60,7 +60,14 @@ run: sim
 	cd $(BUILD) && ./obj/Vtb | tee log.txt
 	@grep -q "RESULT: PASS" $(BUILD)/log.txt && echo "SOC_SIM: PASS" || (echo "SOC_SIM: FAIL"; exit 1)
 
+wave: prog
+	mkdir -p $(BUILD)/obj_wave
+	$(VERILATOR) $(VFLAGS) --trace $(HERE)/tb_soc_top.sv $(RTL) \
+	    --Mdir $(BUILD)/obj_wave -o VtbWave
+	cd $(BUILD) && ./obj_wave/VtbWave +wave +short
+	@ls -lh $(BUILD)/soc.vcd
+
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all prog lint sim run clean
+.PHONY: all prog lint sim run wave clean

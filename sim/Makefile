@@ -78,6 +78,21 @@ run: sim
 compare: run
 	set -o pipefail && python3 $(VGA)/compare.py $(BUILD)/expected.ppm $(BUILD)/actual.ppm $(BUILD) | tee $(BUILD)/vga_compare.txt
 
+# ---------------------------------------------------------------- AXI 桥（队友 RTL）
+# 需要 iverilog（sudo apt install iverilog）
+bridge-test:
+	mkdir -p $(BUILD)/bridge
+	iverilog -g2012 -s tb_sram_axi_bridge -o $(BUILD)/bridge/bridge.vvp \
+	    $(ROOT)/soc/sram_axi_bridge.v $(ROOT)/sim/tb_sram_axi_bridge.v
+	cd $(BUILD)/bridge && vvp bridge.vvp
+
+bridge-wave:
+	mkdir -p $(BUILD)/bridge
+	iverilog -g2012 -s tb_sram_axi_bridge -o $(BUILD)/bridge/bridge.vvp \
+	    $(ROOT)/soc/sram_axi_bridge.v $(ROOT)/sim/tb_sram_axi_bridge.v
+	cd $(BUILD)/bridge && vvp bridge.vvp +wave
+	@ls -lh $(BUILD)/bridge/bridge.vcd
+
 # ---------------------------------------------------------------- 波形
 trace: mem
 	$(VERILATOR) $(VFLAGS) --trace $(RTL) $(CSRC) -o Vtb_vga_top --Mdir $(OBJ_TRACE)

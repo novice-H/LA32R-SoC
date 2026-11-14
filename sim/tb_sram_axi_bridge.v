@@ -127,6 +127,10 @@ module tb_sram_axi_bridge;
     end
 
     initial begin
+        if ($test$plusargs("wave")) begin
+            $dumpfile("bridge.vcd");
+            $dumpvars(0, tb_sram_axi_bridge);
+        end
         inst_req=0; inst_wr=0; inst_size=2; inst_addr=0; inst_wdata=0; inst_wstrb=0;
         data_req=0; data_wr=0; data_size=2; data_addr=0; data_wdata=0; data_wstrb=0;
         repeat (3) @(posedge clk);
