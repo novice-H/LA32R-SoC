@@ -19,6 +19,7 @@ out/
 *.d
 *.elf
 *.bin
+!sw/artifacts/*.bin
 *.map
 *.dis
 *.hex
